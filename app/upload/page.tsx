@@ -47,19 +47,15 @@ export default function UploadPage() {
       }
 
       if (json.positionen.length === 0) {
-        setFehler(
-          'Es konnten keine Positionen erkannt werden. Das PDF hat möglicherweise ein ungewöhnliches Format. ' +
-          'Du kannst Positionen auch manuell eingeben.'
-        );
-        setPositionen([]);
-      } else {
-        setPositionen(json.positionen);
+        setFehler('Es konnten keine Positionen erkannt werden. Das PDF hat möglicherweise ein ungewöhnliches Format.');
+        setLaden(false);
+        return;
       }
 
-      setSchritt('pruefen');
+      // Direkt speichern ohne Zwischenschritt
+      await speichernMitDaten(json.positionen);
     } catch {
       setFehler('Verbindungsfehler. Bitte versuche es erneut.');
-    } finally {
       setLaden(false);
     }
   }
@@ -98,21 +94,13 @@ export default function UploadPage() {
     ]);
   }
 
-  async function speichern() {
-    const gueltige = positionen.filter(p => p.beschreibung.trim() && p.gesamtpreis >= 0);
-
-    if (gueltige.length === 0) {
-      setFehler('Bitte mindestens eine Position mit Beschreibung und Preis eingeben.');
-      return;
-    }
-
+  async function speichernMitDaten(daten: ParsedPosition[]) {
+    const gueltige = daten.filter(p => p.beschreibung.trim() && p.gesamtpreis >= 0);
     setLaden(true);
     setFehler('');
 
-    // Alte Daten löschen
     await supabase.from('positionen').delete().neq('id', '00000000-0000-0000-0000-000000000000');
 
-    // Neue Daten speichern
     const { error } = await supabase.from('positionen').insert(
       gueltige.map(p => ({
         position_nr: p.position_nr || null,
@@ -135,6 +123,10 @@ export default function UploadPage() {
 
     setSchritt('speichern');
     setTimeout(() => { window.location.href = '/'; }, 1500);
+  }
+
+  async function speichern() {
+    await speichernMitDaten(positionen);
   }
 
   const gesamtsumme = positionen.reduce((sum, p) => sum + (p.gesamtpreis || 0), 0);
