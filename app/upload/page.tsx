@@ -134,7 +134,7 @@ export default function UploadPage() {
     }
 
     setSchritt('speichern');
-    setTimeout(() => router.push('/'), 1500);
+    setTimeout(() => { window.location.href = '/'; }, 1500);
   }
 
   const gesamtsumme = positionen.reduce((sum, p) => sum + (p.gesamtpreis || 0), 0);
@@ -195,7 +195,10 @@ export default function UploadPage() {
       <div className="max-w-2xl mx-auto text-center py-16">
         <div className="text-6xl mb-4">✅</div>
         <h2 className="text-2xl font-bold text-gray-900 mb-2">Erfolgreich gespeichert!</h2>
-        <p className="text-gray-500">Du wirst gleich weitergeleitet...</p>
+        <p className="text-gray-500 mb-4">Du wirst gleich weitergeleitet...</p>
+        <a href="/" className="text-blue-600 hover:underline text-sm">
+          → Jetzt zum Dashboard
+        </a>
       </div>
     );
   }
@@ -267,7 +270,7 @@ export default function UploadPage() {
                     <input
                       value={p.position_nr || ''}
                       onChange={e => positionAendern(i, 'position_nr', e.target.value)}
-                      className="w-full text-xs text-gray-500 border border-transparent hover:border-gray-200 focus:border-blue-300 rounded px-1 py-0.5 outline-none"
+                      className="w-full text-xs text-gray-600 border border-transparent hover:border-gray-200 focus:border-blue-300 rounded px-1 py-0.5 outline-none"
                       placeholder="–"
                     />
                   </td>
@@ -275,21 +278,21 @@ export default function UploadPage() {
                     <input
                       value={p.gewerk}
                       onChange={e => positionAendern(i, 'gewerk', e.target.value)}
-                      className="w-full text-xs border border-transparent hover:border-gray-200 focus:border-blue-300 rounded px-1 py-0.5 outline-none"
+                      className="w-full text-xs text-gray-700 border border-transparent hover:border-gray-200 focus:border-blue-300 rounded px-1 py-0.5 outline-none"
                     />
                   </td>
                   <td className="px-3 py-2">
                     <input
                       value={p.beschreibung}
                       onChange={e => positionAendern(i, 'beschreibung', e.target.value)}
-                      className="w-full border border-transparent hover:border-gray-200 focus:border-blue-300 rounded px-1 py-0.5 outline-none"
+                      className="w-full text-gray-800 border border-transparent hover:border-gray-200 focus:border-blue-300 rounded px-1 py-0.5 outline-none"
                     />
                   </td>
                   <td className="px-3 py-2">
                     <input
                       value={p.menge ?? ''}
                       onChange={e => positionAendern(i, 'menge', e.target.value)}
-                      className="w-full text-right border border-transparent hover:border-gray-200 focus:border-blue-300 rounded px-1 py-0.5 outline-none"
+                      className="w-full text-right text-gray-700 border border-transparent hover:border-gray-200 focus:border-blue-300 rounded px-1 py-0.5 outline-none"
                       placeholder="–"
                     />
                   </td>
@@ -297,7 +300,7 @@ export default function UploadPage() {
                     <input
                       value={p.einheit || ''}
                       onChange={e => positionAendern(i, 'einheit', e.target.value)}
-                      className="w-full border border-transparent hover:border-gray-200 focus:border-blue-300 rounded px-1 py-0.5 outline-none"
+                      className="w-full text-gray-700 border border-transparent hover:border-gray-200 focus:border-blue-300 rounded px-1 py-0.5 outline-none"
                       placeholder="–"
                     />
                   </td>
@@ -305,13 +308,13 @@ export default function UploadPage() {
                     <input
                       value={p.gesamtpreis}
                       onChange={e => positionAendern(i, 'gesamtpreis', e.target.value)}
-                      className="w-full text-right font-medium border border-transparent hover:border-gray-200 focus:border-blue-300 rounded px-1 py-0.5 outline-none"
+                      className="w-full text-right font-medium text-gray-900 border border-transparent hover:border-gray-200 focus:border-blue-300 rounded px-1 py-0.5 outline-none"
                     />
                   </td>
                   <td className="px-3 py-2 text-center">
                     <button
                       onClick={() => positionLoeschen(i)}
-                      className="text-gray-300 hover:text-red-400 transition-colors text-lg leading-none"
+                      className="text-gray-400 hover:text-red-400 transition-colors text-lg leading-none"
                       title="Position löschen"
                     >
                       ×

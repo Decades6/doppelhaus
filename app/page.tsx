@@ -59,6 +59,8 @@ export default function Dashboard() {
     .filter(p => p.eigenleistung)
     .reduce((sum, p) => sum + p.gesamtpreis, 0);
   const verbleibend = gesamtsumme - eigenleistungSumme;
+  const mwst = verbleibend * 0.19;
+  const brutto = verbleibend * 1.19;
 
   const gewerke = [...new Set(positionen.map(p => p.gewerk))];
 
@@ -93,7 +95,7 @@ export default function Dashboard() {
   return (
     <div>
       {/* Preis-Übersicht */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-4 mb-8">
         <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-blue-500">
           <div className="text-sm text-gray-500 mb-1">Gesamtangebot</div>
           <div className="text-2xl font-bold text-gray-900">{formatEuro(gesamtsumme)}</div>
@@ -112,6 +114,16 @@ export default function Dashboard() {
           <div className="text-xs text-gray-400 mt-1">
             {gesamtsumme > 0 ? Math.round((eigenleistungSumme / gesamtsumme) * 100) : 0}% Eigenleistungsanteil
           </div>
+        </div>
+        <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-gray-400">
+          <div className="text-sm text-gray-500 mb-1">zzgl. 19 % MwSt.</div>
+          <div className="text-2xl font-bold text-gray-700">{formatEuro(mwst)}</div>
+          <div className="text-xs text-gray-400 mt-1">auf Bauträger-Anteil</div>
+        </div>
+        <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-gray-800">
+          <div className="text-sm text-gray-500 mb-1">Brutto gesamt</div>
+          <div className="text-2xl font-bold text-gray-900">{formatEuro(brutto)}</div>
+          <div className="text-xs text-gray-400 mt-1">inkl. MwSt.</div>
         </div>
       </div>
 

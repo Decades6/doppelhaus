@@ -6,89 +6,119 @@ function parseGermanNumber(str: string): number {
 }
 
 function parseLeistungsverzeichnis(text: string): ParsedPosition[] {
-  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 2);
   const positionen: ParsedPosition[] = [];
-  let currentGewerk = 'Allgemein';
 
-  // German price at end of line: e.g. "3.750,00" or "150,00"
-  const endPricePattern = /(\d{1,3}(?:\.\d{3})*,\d{2})\s*(?:€|EUR)?\s*$/;
-  // All German prices in a string
-  const allPricesPattern = /(\d{1,3}(?:\.\d{3})*,\d{2})/g;
-  // Position number at start (e.g. "01.001", "1.1.2", "3")
-  const posNrPattern = /^(\d{1,3}(?:\.\d{1,3}){1,3})\s+/;
-  // Section header: short line with number + text, no price
-  const sectionPattern = /^(\d{1,2})\s{1,4}([A-ZÄÖÜa-zäöüß][^\d]{5,50})$/;
-  // Quantity + unit pattern
-  const unitList = 'm²|m2|m³|m3|lfdm|lfm|Stk\\.?|St\\.?|Psch\\.?|psch\\.?|kg|VE|Pkg\\.?|\\bm\\b|qm|Std\\.?|h\\b|to\\b|t\\b|l\\b';
-  const unitPattern = new RegExp(`(\\d+(?:[,.]\\d+)?)\\s*(${unitList})`, 'i');
+  // 1. Remove repeating page headers/footers
+  const clean = text
+    .replace(/Angebot - Entwurf[\s\S]*?Pos\.MengeEinheitBeschreibungPreisGesamt\n/g, '')
+    .replace(/Übertrag:[^\n]*\n?/g, '')
+    .replace(/Seite \d+ von \d+[^\n]*\n?/g, '')
+    .replace(/Nettosumme[\s\S]*/g, ''); // everything after Nettosumme is footer
+
+  const lines = clean.split('\n').map(l => l.trim());
+
+  // 2. Collect position blocks
+  // 2-level section headers (Gewerk): "1.1.Baustelleneinrichtung" "1.2.Gerüstbauarbeiten"
+  const gewerkRx = /^(\d+\.\d+\.)([A-ZÄÖÜa-zäöüß].{3,})/;
+  // Skip subtotals
+  const skipRx = /^(Summe \d|Zwischensumme|Nettosumme|Bruttosumme|zzgl\.|MwSt)/i;
+
+  // 3-level positions: "1.1.1." | 2-level positions (rare, e.g. "11.1." followed by digit)
+  const posNrRx3 = /^(\d+\.\d+\.\d+(?:\.\d+)*\.)/;
+  const posNrRx2 = /^(\d+\.\d+\.)(?=\d)/;
+  // Close block on section-summary lines (prevents their prices leaking into previous block)
+  const closingRx = /^(Summe |Zwischensumme )/i;
+
+  let currentGewerk = 'Allgemein';
+  const blocks: { posNr: string; gewerk: string; lines: string[] }[] = [];
+  let current: { posNr: string; gewerk: string; lines: string[] } | null = null;
 
   for (const line of lines) {
-    // Detect section header (Gewerk)
-    const sectionMatch = line.match(sectionPattern);
-    if (sectionMatch && !line.match(endPricePattern)) {
-      currentGewerk = sectionMatch[2].trim();
+    if (!line) continue;
+
+    // Close current block on summary lines (before skipping them)
+    if (closingRx.test(line) || skipRx.test(line)) {
+      if (current) { blocks.push(current); current = null; }
       continue;
     }
 
-    // Check for price at end of line
-    const endMatch = line.match(endPricePattern);
-    if (!endMatch) continue;
+    // Update Gewerk from 2-level headers
+    const gwMatch = line.match(gewerkRx);
+    if (gwMatch && !posNrRx3.test(line) && !posNrRx2.test(line)) {
+      currentGewerk = gwMatch[2].trim();
+      continue;
+    }
 
-    const gesamtpreis = parseGermanNumber(endMatch[1]);
-    if (gesamtpreis <= 0 || gesamtpreis > 99999999) continue;
-
-    let rest = line;
-    let position_nr: string | undefined;
-
-    // Extract position number from start
-    const posMatch = line.match(posNrPattern);
+    // New position block starts
+    const posMatch = line.match(posNrRx3) || line.match(posNrRx2);
     if (posMatch) {
-      position_nr = posMatch[1];
-      rest = rest.slice(posMatch[0].length);
+      if (current) blocks.push(current);
+      current = { posNr: posMatch[1], gewerk: currentGewerk, lines: [line] };
+    } else if (current) {
+      current.lines.push(line);
     }
+  }
+  if (current) blocks.push(current);
 
-    // Remove total price from end
-    rest = rest.replace(endPricePattern, '').trim();
+  // 3. Parse each block
+  const priceRx = /(\d{1,3}(?:\.\d{3})*,\d{2})/g;
+  const parenthesizedPriceRx = /\(\d{1,3}(?:\.\d{3})*,\d{2}\)/;
+  // A line that ends with a German price (the actual price line, not tech-spec lines)
+  const priceLineRx = /\d{1,3}(?:\.\d{3})*,\d{2}\s*$/;
+  const unitList = 'm²|m2|m³|m3|lfdm|lfm|Stk\\.?|St\\.?|Psch\\.?|psch\\.?|Woch\\.?|kg|VE|Pkg\\.?|Std\\.?|xWo\\.?|\\bm\\b|qm';
+  const unitRx = new RegExp(`(\\d+(?:[,.]\\d+)?)\\s*(${unitList})`, 'i');
 
-    // Find Einzelpreis (last remaining price)
-    const allPrices = [...rest.matchAll(allPricesPattern)];
+  for (const block of blocks) {
+    const fullText = block.lines.join(' ');
+
+    // Skip Eventual / Alternativ positions (optional extras not in base price)
+    if (/\b(Eventual|Alternativ)\b/.test(fullText)) continue;
+    // Skip if last price is in parentheses (also marks optional positions)
+    if (parenthesizedPriceRx.test(fullText)) continue;
+
+    // Find the last line that ends with a price (ignores tech-spec lines like "λ=0,035 W/(mK)")
+    const priceLine = [...block.lines].reverse().find(l => priceLineRx.test(l));
+    if (!priceLine) continue;
+
+    // Find all prices in that line
+    const allPrices = [...priceLine.matchAll(priceRx)];
+    if (allPrices.length === 0) continue;
+
+    const gesamtpreis = parseGermanNumber(allPrices[allPrices.length - 1][1]);
+    if (gesamtpreis <= 0) continue;
+
     let einzelpreis: number | undefined;
-    if (allPrices.length >= 1) {
-      const last = allPrices[allPrices.length - 1];
-      const ep = parseGermanNumber(last[1]);
-      if (ep !== gesamtpreis) {
-        einzelpreis = ep;
-        rest = (rest.slice(0, last.index!) + rest.slice(last.index! + last[0].length)).trim();
-      }
+    if (allPrices.length >= 2) {
+      const ep = parseGermanNumber(allPrices[allPrices.length - 2][1]);
+      if (ep !== gesamtpreis) einzelpreis = ep;
     }
 
-    // Find menge and einheit
+    // Extract description from first line (after pos number)
+    const firstLine = block.lines[0].replace(posNrRx3, '').replace(posNrRx2, '').trim();
+    const unitMatch = firstLine.match(unitRx);
     let menge: number | undefined;
     let einheit: string | undefined;
-    const unitMatch = rest.match(unitPattern);
+    let descRaw = firstLine;
     if (unitMatch) {
       menge = parseGermanNumber(unitMatch[1]);
       einheit = unitMatch[2];
-      rest = rest.replace(unitMatch[0], '').trim();
+      descRaw = firstLine.replace(unitMatch[0], '').trim();
     }
 
-    // Clean up description
-    const beschreibung = rest
-      .replace(/\d{1,3}(?:\.\d{3})*(?:,\d{2})?\s*/g, '')
+    const beschreibung = descRaw
+      .replace(/\d{1,3}(?:\.\d{3})*,\d{2}/g, '')
       .replace(/\s+/g, ' ')
       .trim();
 
-    if (beschreibung.length > 1 || position_nr) {
-      positionen.push({
-        position_nr,
-        gewerk: currentGewerk,
-        beschreibung: beschreibung || `Position ${position_nr || positionen.length + 1}`,
-        menge,
-        einheit,
-        einzelpreis,
-        gesamtpreis,
-      });
-    }
+    positionen.push({
+      position_nr: block.posNr.replace(/\.$/, ''),
+      gewerk: block.gewerk,
+      beschreibung: beschreibung || `Position ${block.posNr}`,
+      menge,
+      einheit,
+      einzelpreis,
+      gesamtpreis,
+    });
   }
 
   return positionen;
@@ -109,7 +139,6 @@ export async function POST(request: NextRequest) {
 
     const buffer = Buffer.from(await file.arrayBuffer());
 
-    // Dynamic import to avoid build-time issues with pdf-parse
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const pdfParseModule = await import('pdf-parse') as any;
     const pdfParse = pdfParseModule.default ?? pdfParseModule;
@@ -123,9 +152,10 @@ export async function POST(request: NextRequest) {
       rawText: data.text.slice(0, 2000), // First 2000 chars for debugging
     });
   } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
     console.error('PDF parse error:', error);
     return NextResponse.json(
-      { error: 'PDF konnte nicht gelesen werden. Bitte versuche es erneut.' },
+      { error: `PDF konnte nicht gelesen werden: ${msg}` },
       { status: 500 }
     );
   }
