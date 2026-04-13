@@ -10,11 +10,15 @@ function parseGermanNumber(str: string): number {
 // Bereinigt Einheiten-Reste die am Anfang der Beschreibung kleben
 function bereinigeBeschreibung(text: string): string {
   return text
-    .replace(/^ück\s*/i, '')        // "Stück" → "ück..." Rest
-    .replace(/^üs\s*/i, '')         // andere "üs..." Reste
-    .replace(/^sch\.?\s*/i, '')     // "psch." → "sch..." Rest
-    .replace(/^dm\s*/i, '')         // "lfdm" → "dm..." Rest
-    .replace(/^tück\s*/i, '')       // "Stück" Variante
+    // Bekannte mehrbuchstabige Einheiten-Reste
+    .replace(/^ück\.?\s*/i, '')       // "Stück" → "ück"
+    .replace(/^tück\.?\s*/i, '')      // "Stück" Variante
+    .replace(/^och\.?\s*/i, '')       // "Woch." → "och"
+    .replace(/^xWo\.?\s*/i, '')       // "mxWo." → "xWo"
+    .replace(/^Wo\.?\s*(?=[A-ZÄÖÜ])/, '') // "Wo." vor Großbuchstabe
+    // Generisch: 1–4 Kleinbuchstaben (mit optionalem Punkt) vor Großbuchstabe
+    // Fängt "m", "dm", "d.", "g", etc. ab
+    .replace(/^[a-zäöü]{1,4}\.?\s*(?=[A-ZÄÖÜ])/, '')
     .replace(/\s+/g, ' ')
     .trim();
 }
