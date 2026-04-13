@@ -21,11 +21,15 @@ export default function Dashboard() {
   async function loadPositionen() {
     const { data } = await supabase
       .from('positionen')
-      .select('*')
-      .order('gewerk', { ascending: true })
-      .order('position_nr', { ascending: true });
+      .select('*');
 
     if (data) {
+      // Numerische Sortierung: erst Gewerk, dann Positionsnummer (1, 2, 3 ... 10, 11)
+      data.sort((a: Position, b: Position) => {
+        const gewerk = a.gewerk.localeCompare(b.gewerk, 'de');
+        if (gewerk !== 0) return gewerk;
+        return (a.position_nr ?? '').localeCompare(b.position_nr ?? '', 'de', { numeric: true });
+      });
       setPositionen(data);
       // All Gewerke open by default
       const gewerke = new Set(data.map((p: Position) => p.gewerk));
