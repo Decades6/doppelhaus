@@ -68,8 +68,10 @@ function parseLeistungsverzeichnis(text: string): ParsedPosition[] {
   const priceRx           = /(\d{1,3}(?:\.\d{3})*,\d{2})/g;
   const parenthesizedRx   = /\(\d{1,3}(?:\.\d{3})*,\d{2}\)/;
   const priceLineRx       = /\d{1,3}(?:\.\d{3})*,\d{2}\s*$/;
-  const unitList          = 'm²|m2|m³|m3|lfdm|lfm|Stk\\.?|St\\.?|Psch\\.?|psch\\.?|Woch\\.?|kg|VE|Pkg\\.?|Std\\.?|\\bm\\b|qm';
-  const unitRx            = new RegExp(`(\\d+(?:[,.]\\d+)?)\\s*(${unitList})`, 'i');
+  // Einheiten: spezifische zuerst, generisches "m" zuletzt
+  // Lookahead (?=\s|[A-ZÄÖÜ]|$) erlaubt Einheit direkt vor Großbuchstabe (zusammengeklebt)
+  const unitList          = 'm²|m2|m³|m3|lfdm|lfm|mxWo\\.?|Woch\\.?|Wo\\.?|Stk\\.?|St\\.?|Psch\\.?|psch\\.?|kg|VE|Pkg\\.?|Std\\.?|qm|m';
+  const unitRx            = new RegExp(`(\\d+(?:[,.]\\d+)?)\\s*(${unitList})(?=\\s|[A-ZÄÖÜ]|$)`, 'i');
 
   for (const block of blocks) {
     const fullText = block.lines.join(' ');
