@@ -21,64 +21,62 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Bitte nur PDF-Dateien hochladen' }, { status: 400 });
     }
 
-    const buffer = await file.arrayBuffer();
-    const base64 = Buffer.from(buffer).toString('base64');
+    const buffer = Buffer.from(await file.arrayBuffer());
 
+    // Text aus PDF extrahieren
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const pdfModule = await import('pdf-parse') as any;
+    const pdfParse = pdfModule.default ?? pdfModule;
+    const pdfData = await pdfParse(buffer);
+    const text = pdfData.text;
+
+    // Claude analysiert den Text intelligent
     const message = await client.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 8192,
       messages: [
         {
           role: 'user',
-          content: [
-            {
-              type: 'document',
-              source: {
-                type: 'base64',
-                media_type: 'application/pdf',
-                data: base64,
-              },
-            },
-            {
-              type: 'text',
-              text: `Analysiere dieses deutsche Bauangebot (Leistungsverzeichnis) und extrahiere alle Positionen.
+          content: `Du bist Experte für deutsche Leistungsverzeichnisse im Bauwesen.
 
-Für jede Position extrahiere:
-- position_nr: Die Positionsnummer (z.B. "1.1.1", "2.3.4") ohne abschließenden Punkt
-- gewerk: Das übergeordnete Gewerk/die Kategorie (Abschnittsüberschrift)
-- beschreibung: NUR der kurze Titel der Position (oft fettgedruckt), NICHT den langen Beschreibungstext
-- menge: Die Menge als Zahl
-- einheit: Die Einheit (z.B. "m²", "Stück", "pauschal", "lfdm", "Woch.")
-- einzelpreis: Der Einzelpreis als Zahl (deutsche Kommas in Punkte umwandeln, ohne €)
-- gesamtpreis: Der Gesamtpreis als Zahl (deutsche Kommas in Punkte umwandeln, ohne €)
+Der folgende Text wurde automatisch aus einer PDF extrahiert. Dabei wurden Spalten manchmal zusammengeklebt, z.B.:
+- "StückBauschuttcontainer" → Einheit "Stück" wurde mit dem Kurztitel zusammengeklebt
+- "psch.Baustelle einrichten" → Einheit "psch." klebt am Kurztitel
+- "Woch.Baustellen-WC" → Einheit "Woch." klebt am Kurztitel
+- "ückBauschuttcontainer" → "St" von "Stück" fehlt, Rest klebt am Titel
 
-Antworte NUR mit einem gültigen JSON-Array, ohne Markdown-Blöcke, ohne erklärenden Text:
+Bitte extrahiere alle Positionen korrekt und trenne dabei Einheiten von Beschreibungen.
+
+Regeln:
+- Nur echte Positionen mit Positionsnummer (z.B. 1.1.1, 2.3.4)
+- Keine Summenzeilen, Übertragzeilen oder Gewerk-Überschriften
+- Keine Eventual- oder Alternativpositionen
+- Nur Positionen mit Gesamtpreis > 0
+- Deutsche Zahlen umrechnen: "1.234,56" → 1234.56
+- beschreibung = nur der kurze Titel, nicht der lange Beschreibungstext
+
+Antworte NUR mit einem JSON-Array ohne Markdown:
 [
   {
     "position_nr": "1.1.1",
     "gewerk": "Baustelleneinrichtung",
-    "beschreibung": "Baustelle einrichten",
+    "beschreibung": "Bauschuttcontainer bis 5 m³",
     "menge": 1,
-    "einheit": "pauschal",
-    "einzelpreis": 1000.00,
-    "gesamtpreis": 1000.00
+    "einheit": "Stück",
+    "einzelpreis": 250.00,
+    "gesamtpreis": 250.00
   }
 ]
 
-Wichtige Regeln:
-- Nur Positionen mit Gesamtpreis > 0
-- Keine Summenzeilen, Übertragzeilen oder Gewerke-Überschriften als eigene Positionen
-- Keine Eventual- oder Alternativpositionen
-- Deutsche Zahlen umrechnen: "1.234,56" → 1234.56`,
-            },
-          ],
+Hier ist der extrahierte Text:
+${text}`,
         },
       ],
     });
 
     const responseText = message.content[0].type === 'text' ? message.content[0].text : '';
 
-    // JSON extrahieren (Markdown-Blöcke entfernen falls vorhanden)
+    // JSON extrahieren
     const cleaned = responseText
       .replace(/^```json?\s*/i, '')
       .replace(/\s*```$/, '')
@@ -100,9 +98,10 @@ Wichtige Regeln:
       anzahl: gueltige.length,
     });
   } catch (error) {
-    console.error('PDF parse error:', error);
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('PDF parse error:', msg);
     return NextResponse.json(
-      { error: 'Fehler beim Verarbeiten der PDF. Bitte versuche es erneut.' },
+      { error: `Fehler beim Verarbeiten der PDF: ${msg}` },
       { status: 500 }
     );
   }
