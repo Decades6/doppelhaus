@@ -39,3 +39,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# PDF-Dateien (Angebote nicht auf GitHub)
+*.pdf
+
+# Backup-Dateien
+*-AleksLaptop.*
+*-Desktop.*
