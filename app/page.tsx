@@ -24,11 +24,12 @@ export default function Dashboard() {
       .select('*');
 
     if (data) {
-      // Numerische Sortierung: erst Gewerk, dann Positionsnummer (1, 2, 3 ... 10, 11)
+      // Numerische Sortierung nur nach Positionsnummer (1, 2, 3 ... 10, 11)
       data.sort((a: Position, b: Position) => {
-        const gewerk = a.gewerk.localeCompare(b.gewerk, 'de');
-        if (gewerk !== 0) return gewerk;
-        return (a.position_nr ?? '').localeCompare(b.position_nr ?? '', 'de', { numeric: true });
+        if (!a.position_nr && !b.position_nr) return 0;
+        if (!a.position_nr) return 1;
+        if (!b.position_nr) return -1;
+        return a.position_nr.localeCompare(b.position_nr, 'de', { numeric: true });
       });
       setPositionen(data);
       // All Gewerke open by default
