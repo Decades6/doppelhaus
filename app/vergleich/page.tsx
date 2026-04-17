@@ -138,6 +138,9 @@ export default function VergleichPage() {
   });
 
   const gesamtDifferenz = zeilen.reduce((sum, z) => sum + z.differenz, 0);
+  const neuGesamtNetto  = zeilen.reduce((sum, z) => sum + (z.gesamtpreis_neu ?? 0), 0);
+  const neuMwst         = neuGesamtNetto * 0.19;
+  const neuBrutto       = neuGesamtNetto * 1.19;
   const anzahlNeu      = zeilen.filter(z => z.aenderung === 'neu').length;
   const anzahlEntfernt = zeilen.filter(z => z.aenderung === 'entfernt').length;
   const anzahlPreis    = zeilen.filter(z => z.aenderung === 'preis').length;
@@ -206,27 +209,36 @@ export default function VergleichPage() {
       ) : (
         <>
           {/* Zusammenfassung */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
             <div className="bg-white rounded-xl shadow-sm p-5 border-l-4 border-gray-400">
               <div className="text-sm text-gray-500 mb-1">Preisdifferenz</div>
               <div className={`text-2xl font-bold ${gesamtDifferenz >= 0 ? 'text-red-600' : 'text-green-600'}`}>
                 {gesamtDifferenz >= 0 ? '+' : ''}{formatEuro(gesamtDifferenz)}
               </div>
-              <div className="text-xs text-gray-400 mt-1">
-                {basisVersion?.name} → {neuVersion?.name}
-              </div>
+              <div className="text-xs text-gray-400 mt-1">Netto</div>
+            </div>
+            <div className="bg-white rounded-xl shadow-sm p-5 border-l-4 border-blue-400">
+              <div className="text-sm text-gray-500 mb-1">Netto gesamt (neu)</div>
+              <div className="text-2xl font-bold text-gray-800">{formatEuro(neuGesamtNetto)}</div>
+              <div className="text-xs text-gray-400 mt-1">{neuVersion?.name}</div>
+            </div>
+            <div className="bg-white rounded-xl shadow-sm p-5 border-l-4 border-gray-300">
+              <div className="text-sm text-gray-500 mb-1">zzgl. 19 % MwSt.</div>
+              <div className="text-2xl font-bold text-gray-700">{formatEuro(neuMwst)}</div>
+              <div className="text-xs text-gray-400 mt-1">auf neue Version</div>
+            </div>
+            <div className="bg-white rounded-xl shadow-sm p-5 border-l-4 border-gray-800">
+              <div className="text-sm text-gray-500 mb-1">Brutto gesamt (neu)</div>
+              <div className="text-2xl font-bold text-gray-900">{formatEuro(neuBrutto)}</div>
+              <div className="text-xs text-gray-400 mt-1">inkl. MwSt.</div>
             </div>
             <div className="bg-white rounded-xl shadow-sm p-5 border-l-4 border-green-500">
               <div className="text-sm text-gray-500 mb-1">Neue Positionen</div>
               <div className="text-2xl font-bold text-green-600">+{anzahlNeu}</div>
             </div>
             <div className="bg-white rounded-xl shadow-sm p-5 border-l-4 border-red-500">
-              <div className="text-sm text-gray-500 mb-1">Entfernte Positionen</div>
-              <div className="text-2xl font-bold text-red-600">-{anzahlEntfernt}</div>
-            </div>
-            <div className="bg-white rounded-xl shadow-sm p-5 border-l-4 border-orange-500">
-              <div className="text-sm text-gray-500 mb-1">Preisänderungen</div>
-              <div className="text-2xl font-bold text-orange-600">{anzahlPreis}</div>
+              <div className="text-sm text-gray-500 mb-1">Entfernte / Geändert</div>
+              <div className="text-2xl font-bold text-red-600">{anzahlEntfernt + anzahlPreis}</div>
             </div>
           </div>
 
