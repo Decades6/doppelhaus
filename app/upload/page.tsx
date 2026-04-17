@@ -59,7 +59,7 @@ export default function UploadPage() {
         return;
       }
 
-      await speichernMitDaten(json.positionen as ParsedPosition[]);
+      await speichernMitDaten(json.positionen as ParsedPosition[], file.name);
     } catch (e) {
       setFehler('Unerwarteter Fehler: ' + String(e));
       setLaden(false);
@@ -100,13 +100,13 @@ export default function UploadPage() {
     ]);
   }
 
-  async function speichernMitDaten(daten: ParsedPosition[]) {
+  async function speichernMitDaten(daten: ParsedPosition[], name?: string) {
     const gueltige = daten.filter(p => p.beschreibung.trim() && p.gesamtpreis >= 0);
     setLaden(true);
     setFehler('');
 
     // Neue Version anlegen
-    const versionName = dateiname || `Angebot ${new Date().toLocaleDateString('de-DE')}`;
+    const versionName = name || dateiname || `Angebot ${new Date().toLocaleDateString('de-DE')}`;
     const { data: version, error: versionFehler } = await supabase
       .from('versionen')
       .insert({ name: versionName })
