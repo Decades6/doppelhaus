@@ -2,37 +2,52 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Position } from '@/lib/types';
+import { Position, Version } from '@/lib/types';
 import Link from 'next/link';
 
 function formatEuro(amount: number): string {
   return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(amount);
 }
 
+function formatDatum(iso: string): string {
+  return new Date(iso).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
 export default function Dashboard() {
   const [positionen, setPositionen] = useState<Position[]>([]);
+  const [aktuelleVersion, setAktuelleVersion] = useState<Version | null>(null);
+  const [versionsAnzahl, setVersionsAnzahl] = useState(0);
   const [loading, setLoading] = useState(true);
   const [offeneGewerke, setOffeneGewerke] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    loadPositionen();
+    loadDaten();
   }, []);
 
-  async function loadPositionen() {
+  async function loadDaten() {
+    const { data: versionen } = await supabase
+      .from('versionen')
+      .select('*')
+      .order('erstellt_am', { ascending: false });
+
+    if (!versionen || versionen.length === 0) {
+      setLoading(false);
+      return;
+    }
+
+    setVersionsAnzahl(versionen.length);
+    const neuste = versionen[0] as Version;
+    setAktuelleVersion(neuste);
+
     const { data } = await supabase
       .from('positionen')
-      .select('*');
+      .select('*')
+      .eq('version_id', neuste.id)
+      .order('gewerk', { ascending: true })
+      .order('position_nr', { ascending: true });
 
     if (data) {
-      // Numerische Sortierung nur nach Positionsnummer (1, 2, 3 ... 10, 11)
-      data.sort((a: Position, b: Position) => {
-        if (!a.position_nr && !b.position_nr) return 0;
-        if (!a.position_nr) return 1;
-        if (!b.position_nr) return -1;
-        return a.position_nr.localeCompare(b.position_nr, 'de', { numeric: true });
-      });
       setPositionen(data);
-      // All Gewerke open by default
       const gewerke = new Set(data.map((p: Position) => p.gewerk));
       setOffeneGewerke(gewerke);
     }
@@ -78,7 +93,7 @@ export default function Dashboard() {
     );
   }
 
-  if (positionen.length === 0) {
+  if (!aktuelleVersion) {
     return (
       <div className="text-center py-20">
         <div className="text-7xl mb-6">📋</div>
@@ -99,6 +114,23 @@ export default function Dashboard() {
 
   return (
     <div>
+      {/* Versions-Info */}
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3 text-sm">
+          <span className="text-gray-500">Aktuelle Version:</span>
+          <span className="font-medium text-gray-800">{aktuelleVersion.name}</span>
+          <span className="text-gray-400">({formatDatum(aktuelleVersion.erstellt_am)})</span>
+        </div>
+        {versionsAnzahl >= 2 && (
+          <Link
+            href="/vergleich"
+            className="text-sm bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors"
+          >
+            Versionen vergleichen
+          </Link>
+        )}
+      </div>
+
       {/* Preis-Übersicht */}
       <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-4 mb-8">
         <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-blue-500">
@@ -132,13 +164,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Aktionen */}
-      <div className="flex justify-end mb-4 gap-3">
-        <Link href="/edit" className="text-sm text-gray-500 hover:text-gray-700 px-4 py-2 border border-gray-300 rounded-lg transition-colors">
-          Positionen bearbeiten
-        </Link>
-      </div>
-
       {/* Hinweis */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 mb-6 text-sm text-blue-700">
         Klicke auf das Kreis-Symbol rechts bei einer Position um sie als <strong>Eigenleistung</strong> zu markieren.
@@ -157,7 +182,6 @@ export default function Dashboard() {
 
           return (
             <div key={gewerk} className="bg-white rounded-xl shadow-sm overflow-hidden">
-              {/* Gewerk Header */}
               <button
                 onClick={() => toggleGewerk(gewerk)}
                 className="w-full bg-gray-50 px-6 py-4 flex items-center justify-between border-b border-gray-100 hover:bg-gray-100 transition-colors text-left"
@@ -179,7 +203,6 @@ export default function Dashboard() {
                 </div>
               </button>
 
-              {/* Positionen Tabelle */}
               {isOffen && (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
@@ -204,9 +227,7 @@ export default function Dashboard() {
                           <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">
                             {p.position_nr || '–'}
                           </td>
-                          <td className="px-4 py-3 text-gray-800">
-                            {p.beschreibung}
-                          </td>
+                          <td className="px-4 py-3 text-gray-800">{p.beschreibung}</td>
                           <td className="px-4 py-3 text-right text-gray-500 whitespace-nowrap">
                             {p.menge != null ? `${p.menge} ${p.einheit || ''}`.trim() : '–'}
                           </td>

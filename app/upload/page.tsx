@@ -99,10 +99,23 @@ export default function UploadPage() {
     setLaden(true);
     setFehler('');
 
-    await supabase.from('positionen').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    // Neue Version anlegen
+    const versionName = dateiname || `Angebot ${new Date().toLocaleDateString('de-DE')}`;
+    const { data: version, error: versionFehler } = await supabase
+      .from('versionen')
+      .insert({ name: versionName })
+      .select()
+      .single();
+
+    if (versionFehler || !version) {
+      setFehler('Fehler beim Anlegen der Version: ' + (versionFehler?.message || ''));
+      setLaden(false);
+      return;
+    }
 
     const { error } = await supabase.from('positionen').insert(
       gueltige.map(p => ({
+        version_id: version.id,
         position_nr: p.position_nr || null,
         gewerk: p.gewerk || 'Allgemein',
         beschreibung: p.beschreibung,

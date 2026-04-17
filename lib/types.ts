@@ -1,5 +1,12 @@
+export interface Version {
+  id: string;
+  name: string;
+  erstellt_am: string;
+}
+
 export interface Position {
   id: string;
+  version_id: string | null;
   position_nr: string | null;
   gewerk: string;
   beschreibung: string;
