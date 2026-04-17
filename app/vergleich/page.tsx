@@ -184,7 +184,7 @@ export default function VergleichPage() {
       {/* Versionsauswahl */}
       <div className="bg-white rounded-xl shadow-sm p-4 mb-6 flex flex-wrap items-center gap-4">
         <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-500 font-medium">Basis:</span>
+          <span className="text-sm text-gray-700 dark:text-gray-200 font-medium">Basis:</span>
           <select
             value={basisId}
             onChange={e => setBasisId(e.target.value)}
@@ -199,7 +199,7 @@ export default function VergleichPage() {
         </div>
         <span className="text-gray-400">→</span>
         <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-500 font-medium">Neu:</span>
+          <span className="text-sm text-gray-700 dark:text-gray-200 font-medium">Neu:</span>
           <select
             value={neuId}
             onChange={e => setNeuId(e.target.value)}
