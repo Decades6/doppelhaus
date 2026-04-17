@@ -28,6 +28,19 @@ function formatDatum(iso: string): string {
   return new Date(iso).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
+function comparePositionNr(a: string | null, b: string | null): number {
+  if (!a && !b) return 0;
+  if (!a) return 1;
+  if (!b) return -1;
+  const partsA = a.split('.').map(Number);
+  const partsB = b.split('.').map(Number);
+  for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
+    const diff = (partsA[i] || 0) - (partsB[i] || 0);
+    if (diff !== 0) return diff;
+  }
+  return 0;
+}
+
 function vergleiche(alt: Position[], neu: Position[]): VergleichZeile[] {
   const altMap = new Map<string, Position>();
   const neuMap = new Map<string, Position>();
@@ -68,10 +81,7 @@ function vergleiche(alt: Position[], neu: Position[]): VergleichZeile[] {
     });
   }
 
-  return zeilen.sort((x, y) => {
-    if (x.gewerk !== y.gewerk) return x.gewerk.localeCompare(y.gewerk, 'de');
-    return (x.position_nr || '').localeCompare(y.position_nr || '', 'de');
-  });
+  return zeilen.sort((x, y) => comparePositionNr(x.position_nr, y.position_nr));
 }
 
 const BADGE: Record<Aenderungstyp, { label: string; bg: string; text: string; row: string }> = {
