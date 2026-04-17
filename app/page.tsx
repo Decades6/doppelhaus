@@ -117,9 +117,9 @@ export default function Dashboard() {
       {/* Versions-Info */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3 text-sm">
-          <span className="text-gray-500">Aktuelle Version:</span>
-          <span className="font-medium text-gray-800">{aktuelleVersion.name}</span>
-          <span className="text-gray-400">({formatDatum(aktuelleVersion.erstellt_am)})</span>
+          <span className="text-gray-500 dark:text-gray-300">Aktuelle Version:</span>
+          <span className="font-medium text-gray-800 dark:text-gray-100">{aktuelleVersion.name}</span>
+          <span className="text-gray-400 dark:text-gray-400">({formatDatum(aktuelleVersion.erstellt_am)})</span>
         </div>
         {versionsAnzahl >= 2 && (
           <Link
@@ -134,33 +134,33 @@ export default function Dashboard() {
       {/* Preis-Übersicht */}
       <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-4 mb-8">
         <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-blue-500">
-          <div className="text-sm text-gray-500 mb-1">Gesamtangebot</div>
+          <div className="text-sm text-gray-500 dark:text-gray-300 mb-1">Gesamtangebot</div>
           <div className="text-2xl font-bold text-gray-900">{formatEuro(gesamtsumme)}</div>
-          <div className="text-xs text-gray-400 mt-1">{positionen.length} Positionen</div>
+          <div className="text-xs text-gray-400 dark:text-gray-300 mt-1">{positionen.length} Positionen</div>
         </div>
         <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-green-500">
-          <div className="text-sm text-gray-500 mb-1">Ersparnis durch Eigenleistung</div>
+          <div className="text-sm text-gray-500 dark:text-gray-300 mb-1">Ersparnis durch Eigenleistung</div>
           <div className="text-2xl font-bold text-green-600">{formatEuro(eigenleistungSumme)}</div>
-          <div className="text-xs text-gray-400 mt-1">
+          <div className="text-xs text-gray-400 dark:text-gray-300 mt-1">
             {positionen.filter(p => p.eigenleistung).length} Positionen markiert
           </div>
         </div>
         <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-orange-500">
-          <div className="text-sm text-gray-500 mb-1">Verbleibend für Bauträger</div>
+          <div className="text-sm text-gray-500 dark:text-gray-300 mb-1">Verbleibend für Bauträger</div>
           <div className="text-2xl font-bold text-orange-600">{formatEuro(verbleibend)}</div>
-          <div className="text-xs text-gray-400 mt-1">
+          <div className="text-xs text-gray-400 dark:text-gray-300 mt-1">
             {gesamtsumme > 0 ? Math.round((eigenleistungSumme / gesamtsumme) * 100) : 0}% Eigenleistungsanteil
           </div>
         </div>
         <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-gray-400">
-          <div className="text-sm text-gray-500 mb-1">zzgl. 19 % MwSt.</div>
+          <div className="text-sm text-gray-500 dark:text-gray-300 mb-1">zzgl. 19 % MwSt.</div>
           <div className="text-2xl font-bold text-gray-700">{formatEuro(mwst)}</div>
-          <div className="text-xs text-gray-400 mt-1">auf Bauträger-Anteil</div>
+          <div className="text-xs text-gray-400 dark:text-gray-300 mt-1">auf Bauträger-Anteil</div>
         </div>
         <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-gray-800">
-          <div className="text-sm text-gray-500 mb-1">Brutto gesamt</div>
+          <div className="text-sm text-gray-500 dark:text-gray-300 mb-1">Brutto gesamt</div>
           <div className="text-2xl font-bold text-gray-900">{formatEuro(brutto)}</div>
-          <div className="text-xs text-gray-400 mt-1">inkl. MwSt.</div>
+          <div className="text-xs text-gray-400 dark:text-gray-300 mt-1">inkl. MwSt.</div>
         </div>
       </div>
 
