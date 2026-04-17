@@ -38,24 +38,30 @@ export default function UploadPage() {
         body: formData,
       });
 
-      const json = await res.json();
-
-      if (!res.ok) {
-        setFehler(json.error || 'Fehler beim Verarbeiten der PDF.');
+      let json: Record<string, unknown>;
+      try {
+        json = await res.json();
+      } catch {
+        setFehler(`HTTP ${res.status}: Antwort konnte nicht gelesen werden (kein JSON).`);
         setLaden(false);
         return;
       }
 
-      if (json.positionen.length === 0) {
+      if (!res.ok) {
+        setFehler(`HTTP ${res.status}: ${json.error || JSON.stringify(json)}`);
+        setLaden(false);
+        return;
+      }
+
+      if (!Array.isArray(json.positionen) || json.positionen.length === 0) {
         setFehler('Es konnten keine Positionen erkannt werden. Das PDF hat möglicherweise ein ungewöhnliches Format.');
         setLaden(false);
         return;
       }
 
-      // Direkt speichern ohne Zwischenschritt
-      await speichernMitDaten(json.positionen);
-    } catch {
-      setFehler('Verbindungsfehler. Bitte versuche es erneut.');
+      await speichernMitDaten(json.positionen as ParsedPosition[]);
+    } catch (e) {
+      setFehler('Unerwarteter Fehler: ' + String(e));
       setLaden(false);
     }
   }
