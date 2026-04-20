@@ -114,18 +114,20 @@ function parseLeistungsverzeichnis(text: string): ParsedPosition[] {
       descRaw  = firstLine.replace(unitMatch[0], '').trim();
     }
 
-    // Zweite Zeile anhängen nur wenn erste Zeile unvollständig endet (Verbindungswort)
+    // Titelfortsetzungen sammeln (max. 3 Zeilen) solange Zeile unvollständig endet
     const verbindungswoerter = new Set(['mit', 'und', 'für', 'von', 'zu', 'als', 'der', 'die', 'das', 'des', 'bei', 'an', 'in', 'auf', 'aus', 'nach', 'über', 'unter', 'oder', 'je', 'pro']);
-    const descTrimmed = descRaw.trim();
-    const letztesWort = descTrimmed.split(/\s+/).pop()?.toLowerCase().replace(/[^a-zäöüß]/g, '') ?? '';
-    const endetMitBindestrich = descTrimmed.endsWith('-');
-    const endetMitKomma = descTrimmed.endsWith(',');
-    const endetMitZahlOderGleich = /[=\d]\s*$/.test(descTrimmed);
     const langTextRx = /^[•\-]|^(bestehend|inkl\.|einschl\.|komplett|liefern|montieren|gemäß|nach DIN|Ausführung|Herstellung)/i;
-    const zweiteZeile = block.lines[1];
-    const istFortsetzung = verbindungswoerter.has(letztesWort) || endetMitBindestrich || endetMitKomma || endetMitZahlOderGleich;
-    if (zweiteZeile && istFortsetzung && !langTextRx.test(zweiteZeile) && !priceLineRx.test(zweiteZeile)) {
-      descRaw += (endetMitBindestrich ? '' : ' ') + zweiteZeile;
+    for (let j = 1; j <= 3 && j < block.lines.length - 1; j++) {
+      const prev = descRaw.trim();
+      const letztesWort = prev.split(/\s+/).pop()?.toLowerCase().replace(/[^a-zäöüß]/g, '') ?? '';
+      const mitBindestrich = prev.endsWith('-');
+      const istFortsetzung = mitBindestrich
+        || prev.endsWith(',')
+        || /[=\d]\s*$/.test(prev)
+        || verbindungswoerter.has(letztesWort);
+      const naechste = block.lines[j];
+      if (!naechste || !istFortsetzung || langTextRx.test(naechste) || priceLineRx.test(naechste)) break;
+      descRaw += (mitBindestrich ? '' : ' ') + naechste;
     }
 
     const beschreibung = bereinigeBeschreibung(
