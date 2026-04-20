@@ -50,7 +50,7 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
 
   if (!user) return null;
 
-  const familienname = user.email?.split('@')[0] ?? 'Nutzer';
+  const familienname = user.user_metadata?.display_name ?? user.email?.split('@')[0] ?? 'Nutzer';
 
   return (
     <>
