@@ -114,6 +114,14 @@ function parseLeistungsverzeichnis(text: string): ParsedPosition[] {
       descRaw  = firstLine.replace(unitMatch[0], '').trim();
     }
 
+    // Mehrzeilige Titel: Zeilen sammeln bis Langtext oder Preis beginnt
+    const langTextRx = /^[•\-]|^(bestehend|inkl\.|einschl\.|komplett|liefern|montieren|gemäß|nach DIN|für |Ausführung|Herstellung)/i;
+    for (let j = 1; j < block.lines.length - 1; j++) {
+      const line = block.lines[j];
+      if (!line || langTextRx.test(line) || priceLineRx.test(line)) break;
+      descRaw += ' ' + line;
+    }
+
     const beschreibung = bereinigeBeschreibung(
       descRaw.replace(/\d{1,3}(?:\.\d{3})*,\d{2}/g, '').trim()
     );
