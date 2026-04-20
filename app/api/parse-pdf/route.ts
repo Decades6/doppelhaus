@@ -119,10 +119,11 @@ function parseLeistungsverzeichnis(text: string): ParsedPosition[] {
     const descTrimmed = descRaw.trim();
     const letztesWort = descTrimmed.split(/\s+/).pop()?.toLowerCase().replace(/[^a-zäöüß]/g, '') ?? '';
     const endetMitBindestrich = descTrimmed.endsWith('-');
+    const endetMitKomma = descTrimmed.endsWith(',');
     const endetMitZahlOderGleich = /[=\d]\s*$/.test(descTrimmed);
     const langTextRx = /^[•\-]|^(bestehend|inkl\.|einschl\.|komplett|liefern|montieren|gemäß|nach DIN|Ausführung|Herstellung)/i;
     const zweiteZeile = block.lines[1];
-    const istFortsetzung = verbindungswoerter.has(letztesWort) || endetMitBindestrich || endetMitZahlOderGleich;
+    const istFortsetzung = verbindungswoerter.has(letztesWort) || endetMitBindestrich || endetMitKomma || endetMitZahlOderGleich;
     if (zweiteZeile && istFortsetzung && !langTextRx.test(zweiteZeile) && !priceLineRx.test(zweiteZeile)) {
       descRaw += (endetMitBindestrich ? '' : ' ') + zweiteZeile;
     }
