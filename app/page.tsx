@@ -78,6 +78,43 @@ export default function Dashboard() {
     );
   }
 
+  function exportGewerkeXml() {
+    const sorted = [...new Set(positionen.map(p => p.gewerk))].sort((a, b) => {
+      const aNr = positionen.find(p => p.gewerk === a && p.position_nr)?.position_nr ?? null;
+      const bNr = positionen.find(p => p.gewerk === b && p.position_nr)?.position_nr ?? null;
+      return comparePositionNr(aNr, bNr);
+    });
+
+    const zeilen = sorted.map(gewerk => {
+      const nr = positionen.find(p => p.gewerk === gewerk && p.position_nr)?.position_nr?.split('.').slice(0, 2).join('.') ?? '';
+      const anzahl = positionen.filter(p => p.gewerk === gewerk).length;
+      return `  <gewerk>
+    <nummer>${nr}</nummer>
+    <name>${gewerk.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</name>
+    <anzahl_positionen>${anzahl}</anzahl_positionen>
+    <richtig></richtig>
+    <falsch></falsch>
+    <korrekte_bezeichnung></korrekte_bezeichnung>
+  </gewerk>`;
+    }).join('\n');
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<!-- Gewerk-Prüfliste: ${aktuelleVersion?.name} -->
+<!-- Anleitung: Trage X in <richtig> oder <falsch> ein. -->
+<!-- Bei falsch: korrekte Bezeichnung in <korrekte_bezeichnung> eintragen. -->
+<gewerke>
+${zeilen}
+</gewerke>`;
+
+    const blob = new Blob([xml], { type: 'application/xml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `gewerke-pruefung-${aktuelleVersion?.name ?? 'export'}.xml`.replace(/\s+/g, '-');
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   function toggleGewerk(gewerk: string) {
     setOffeneGewerke(prev => {
       const next = new Set(prev);
@@ -138,14 +175,23 @@ export default function Dashboard() {
           <span className="font-medium text-gray-800 dark:text-gray-100">{aktuelleVersion.name}</span>
           <span className="text-gray-400 dark:text-gray-400">({formatDatum(aktuelleVersion.erstellt_am)})</span>
         </div>
-        {versionsAnzahl >= 2 && (
-          <Link
-            href="/vergleich"
-            className="text-sm bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors"
+        <div className="flex items-center gap-2">
+          <button
+            onClick={exportGewerkeXml}
+            className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-gray-400 transition-colors"
+            title="Gewerk-Prüfliste als XML exportieren"
           >
-            Versionen vergleichen
-          </Link>
-        )}
+            Gewerke exportieren
+          </button>
+          {versionsAnzahl >= 2 && (
+            <Link
+              href="/vergleich"
+              className="text-sm bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors"
+            >
+              Versionen vergleichen
+            </Link>
+          )}
+        </div>
       </div>
 
       {/* Preis-Übersicht */}
