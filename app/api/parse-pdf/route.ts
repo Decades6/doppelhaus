@@ -121,9 +121,11 @@ function parseLeistungsverzeichnis(text: string): ParsedPosition[] {
       const prev = descRaw.trim();
       const letztesWort = prev.split(/\s+/).pop()?.toLowerCase().replace(/[^a-zäöüß]/g, '') ?? '';
       const mitBindestrich = prev.endsWith('-');
+      const offeneKlammern = (prev.match(/\(/g) ?? []).length > (prev.match(/\)/g) ?? []).length;
       const istFortsetzung = mitBindestrich
         || prev.endsWith(',')
         || prev.endsWith('/')
+        || offeneKlammern
         || /=\d+\s*$/.test(prev)
         || verbindungswoerter.has(letztesWort);
       const naechste = block.lines[j];
