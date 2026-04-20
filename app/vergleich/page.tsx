@@ -280,14 +280,15 @@ export default function VergleichPage() {
             {gewerke.map(gewerk => {
               const gwZeilen = gefilterteZeilen.filter(z => z.gewerk === gewerk);
               const gwDiff = gwZeilen.reduce((sum, z) => sum + z.differenz, 0);
-              const gwNummer = gwZeilen.find(z => z.position_nr)?.position_nr?.split('.')[0];
+              const gwNummerParts = gwZeilen.find(z => z.position_nr)?.position_nr?.split('.');
+              const gwNummer = gwNummerParts ? gwNummerParts.slice(0, 2).join('.') : undefined;
 
               return (
                 <div key={gewerk} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden">
                   <div className="bg-gray-50 dark:bg-gray-700 px-6 py-3 border-b border-gray-100 dark:border-gray-600 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       {gwNummer && (
-                        <span className="text-xs font-mono font-medium text-gray-400 dark:text-gray-500 w-5 text-right shrink-0">{gwNummer}</span>
+                        <span className="text-xs font-mono font-medium text-gray-400 dark:text-gray-500 shrink-0">{gwNummer}</span>
                       )}
                       <h3 className="font-semibold text-gray-800 dark:text-white">{gewerk}</h3>
                       <span className="text-xs text-gray-400 dark:text-gray-300 bg-gray-200 dark:bg-gray-600 px-2 py-0.5 rounded-full">

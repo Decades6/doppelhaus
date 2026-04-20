@@ -179,7 +179,8 @@ export default function Dashboard() {
             .filter(p => p.eigenleistung)
             .reduce((sum, p) => sum + p.gesamtpreis, 0);
           const isOffen = offeneGewerke.has(gewerk);
-          const gwNummer = gwPositionen.find(p => p.position_nr)?.position_nr?.split('.')[0];
+          const gwNummerParts = gwPositionen.find(p => p.position_nr)?.position_nr?.split('.');
+          const gwNummer = gwNummerParts ? gwNummerParts.slice(0, 2).join('.') : undefined;
 
           return (
             <div key={gewerk} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden">
@@ -190,7 +191,7 @@ export default function Dashboard() {
                 <div className="flex items-center gap-3">
                   <span className="text-gray-400 dark:text-gray-300">{isOffen ? '▼' : '▶'}</span>
                   {gwNummer && (
-                    <span className="text-xs font-mono font-medium text-gray-400 dark:text-gray-500 w-5 text-right shrink-0">{gwNummer}</span>
+                    <span className="text-xs font-mono font-medium text-gray-400 dark:text-gray-500 shrink-0">{gwNummer}</span>
                   )}
                   <h3 className="font-semibold text-gray-800 dark:text-white">{gewerk}</h3>
                   <span className="text-xs text-gray-400 dark:text-gray-300 bg-gray-200 dark:bg-gray-600 px-2 py-0.5 rounded-full">
