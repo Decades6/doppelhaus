@@ -13,6 +13,25 @@ function formatDatum(iso: string): string {
   return new Date(iso).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
+type Gruppe =
+  | { type: 'single'; pos: Position }
+  | { type: 'pair'; base: Position; alt: Position };
+
+function buildPaare(sorted: Position[]): Gruppe[] {
+  const result: Gruppe[] = [];
+  let i = 0;
+  while (i < sorted.length) {
+    if (sorted[i + 1]?.alternativ) {
+      result.push({ type: 'pair', base: sorted[i], alt: sorted[i + 1] });
+      i += 2;
+    } else {
+      result.push({ type: 'single', pos: sorted[i] });
+      i++;
+    }
+  }
+  return result;
+}
+
 function comparePositionNr(a: string | null, b: string | null): number {
   if (!a && !b) return 0;
   if (!a) return 1;
@@ -129,8 +148,21 @@ ${zeilen}
     });
   }
 
+  // Basis-Positionen die durch aktive Alternativ ersetzt werden
+  const ersetzteIds = new Set<string>();
+  [...new Set(positionen.map(p => p.gewerk))].forEach(gw => {
+    const sorted = positionen
+      .filter(p => p.gewerk === gw)
+      .sort((a, b) => comparePositionNr(a.position_nr, b.position_nr));
+    for (let i = 0; i < sorted.length - 1; i++) {
+      if (sorted[i + 1].alternativ && sorted[i + 1].optional_aktiv) {
+        ersetzteIds.add(sorted[i].id);
+      }
+    }
+  });
+
   const istOptional = (p: Position) => (p.eventual || p.alternativ) && !p.optional_aktiv;
-  const aktivPositionen = positionen.filter(p => !istOptional(p));
+  const aktivPositionen = positionen.filter(p => !istOptional(p) && !ersetzteIds.has(p.id));
   const optionalPositionen = positionen.filter(p => p.eventual || p.alternativ);
   const optionalNichtAktiv = optionalPositionen.filter(p => !p.optional_aktiv);
   const eventualSumme = optionalNichtAktiv.reduce((sum, p) => sum + p.gesamtpreis, 0);
@@ -258,9 +290,12 @@ ${zeilen}
           const gwPositionen = positionen
             .filter(p => p.gewerk === gewerk)
             .sort((a, b) => comparePositionNr(a.position_nr, b.position_nr));
-          const gwSumme = gwPositionen.reduce((sum, p) => sum + p.gesamtpreis, 0);
+          const gwPaare = buildPaare(gwPositionen);
+          const gwSumme = gwPositionen
+            .filter(p => !ersetzteIds.has(p.id) && !istOptional(p))
+            .reduce((sum, p) => sum + p.gesamtpreis, 0);
           const gwEigenleistung = gwPositionen
-            .filter(p => p.eigenleistung)
+            .filter(p => p.eigenleistung && !ersetzteIds.has(p.id))
             .reduce((sum, p) => sum + p.gesamtpreis, 0);
           const isOffen = offeneGewerke.has(gewerk);
           const gwNummerParts = gwPositionen.find(p => p.position_nr)?.position_nr?.split('.');
@@ -302,73 +337,83 @@ ${zeilen}
                         <th className="px-4 py-2 text-right font-medium w-28">Menge</th>
                         <th className="px-4 py-2 text-right font-medium w-28">EP</th>
                         <th className="px-4 py-2 text-right font-medium w-32">GP</th>
-                        <th className="px-4 py-2 text-center font-medium w-32">Eigenleistung</th>
+                        <th className="px-4 py-2 text-center font-medium w-32">Aktion</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-50">
-                      {gwPositionen.map(p => (
-                        <tr
-                          key={p.id}
-                          className={`transition-colors ${
-                            p.eigenleistung ? 'bg-green-50 dark:bg-green-900/20' :
-                            (p.eventual || p.alternativ) && !p.optional_aktiv ? 'opacity-40' :
-                            'hover:bg-gray-50 dark:hover:bg-gray-700/50'
-                          }`}
-                        >
-                          <td className="px-4 py-3 text-gray-400 dark:text-gray-500 text-xs whitespace-nowrap">
-                            {p.position_nr || '–'}
-                          </td>
-                          <td className="px-4 py-3 text-gray-800 dark:text-gray-200">
-                            <div className="flex items-center gap-2">
-                              {p.eventual && (
-                                <span className="text-xs px-1.5 py-0.5 rounded bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400 font-medium shrink-0">Eventual</span>
-                              )}
-                              {p.alternativ && (
-                                <span className="text-xs px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400 font-medium shrink-0">Alternativ</span>
-                              )}
-                              {p.beschreibung}
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-right text-gray-500 dark:text-gray-400 whitespace-nowrap">
-                            {p.menge != null ? `${p.menge} ${p.einheit || ''}`.trim() : '–'}
-                          </td>
-                          <td className="px-4 py-3 text-right text-gray-500 dark:text-gray-400 whitespace-nowrap">
-                            {p.einzelpreis != null ? formatEuro(p.einzelpreis) : '–'}
-                          </td>
-                          <td className={`px-4 py-3 text-right font-medium whitespace-nowrap ${
-                            p.eigenleistung ? 'line-through text-gray-300 dark:text-gray-600' : 'text-gray-900 dark:text-white'
-                          }`}>
-                            {formatEuro(p.gesamtpreis)}
-                          </td>
-                          <td className="px-4 py-3 text-center">
-                            {(p.eventual || p.alternativ) ? (
-                              <button
-                                onClick={() => toggleOptionalAktiv(p.id, p.optional_aktiv)}
-                                title={p.optional_aktiv ? 'Aus Angebot entfernen' : 'Ins Angebot aufnehmen'}
-                                className={`w-8 h-8 rounded-full border-2 flex items-center justify-center mx-auto transition-all text-sm font-bold ${
-                                  p.optional_aktiv
-                                    ? 'bg-yellow-500 border-yellow-500 text-white'
-                                    : 'border-gray-300 dark:border-gray-600 text-gray-400 hover:border-yellow-400 hover:text-yellow-500'
-                                }`}
-                              >
-                                +
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => toggleEigenleistung(p.id, p.eigenleistung)}
-                                title={p.eigenleistung ? 'Als Fremdleistung markieren' : 'Als Eigenleistung markieren'}
-                                className={`w-8 h-8 rounded-full border-2 flex items-center justify-center mx-auto transition-all text-sm font-bold ${
-                                  p.eigenleistung
-                                    ? 'bg-green-500 border-green-500 text-white'
-                                    : 'border-gray-300 dark:border-gray-600 text-transparent hover:border-green-400 hover:text-green-400'
-                                }`}
-                              >
-                                ✓
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
+                    <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
+                      {gwPaare.map(gruppe => {
+                        if (gruppe.type === 'single') {
+                          const p = gruppe.pos;
+                          const ersetzt = ersetzteIds.has(p.id);
+                          return (
+                            <tr key={p.id} className={`transition-colors ${
+                              p.eigenleistung ? 'bg-green-50 dark:bg-green-900/20' :
+                              p.eventual && !p.optional_aktiv ? 'opacity-40' :
+                              ersetzt ? 'opacity-30' :
+                              'hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                            }`}>
+                              <td className="px-4 py-3 text-gray-400 dark:text-gray-500 text-xs whitespace-nowrap">{p.position_nr || '–'}</td>
+                              <td className="px-4 py-3 text-gray-800 dark:text-gray-200">
+                                <div className="flex items-center gap-2">
+                                  {p.eventual && <span className="text-xs px-1.5 py-0.5 rounded bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400 font-medium shrink-0">Eventual</span>}
+                                  {p.beschreibung}
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-right text-gray-500 dark:text-gray-400 whitespace-nowrap">{p.menge != null ? `${p.menge} ${p.einheit || ''}`.trim() : '–'}</td>
+                              <td className="px-4 py-3 text-right text-gray-500 dark:text-gray-400 whitespace-nowrap">{p.einzelpreis != null ? formatEuro(p.einzelpreis) : '–'}</td>
+                              <td className={`px-4 py-3 text-right font-medium whitespace-nowrap ${p.eigenleistung ? 'line-through text-gray-300 dark:text-gray-600' : 'text-gray-900 dark:text-white'}`}>{formatEuro(p.gesamtpreis)}</td>
+                              <td className="px-4 py-3 text-center">
+                                {p.eventual ? (
+                                  <button onClick={() => toggleOptionalAktiv(p.id, p.optional_aktiv)} title={p.optional_aktiv ? 'Aus Angebot entfernen' : 'Ins Angebot aufnehmen'}
+                                    className={`w-8 h-8 rounded-full border-2 flex items-center justify-center mx-auto transition-all text-sm font-bold ${p.optional_aktiv ? 'bg-yellow-500 border-yellow-500 text-white' : 'border-gray-300 dark:border-gray-600 text-gray-400 hover:border-yellow-400 hover:text-yellow-500'}`}>+</button>
+                                ) : (
+                                  <button onClick={() => toggleEigenleistung(p.id, p.eigenleistung)} title={p.eigenleistung ? 'Als Fremdleistung markieren' : 'Als Eigenleistung markieren'}
+                                    className={`w-8 h-8 rounded-full border-2 flex items-center justify-center mx-auto transition-all text-sm font-bold ${p.eigenleistung ? 'bg-green-500 border-green-500 text-white' : 'border-gray-300 dark:border-gray-600 text-transparent hover:border-green-400 hover:text-green-400'}`}>✓</button>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        } else {
+                          const { base, alt } = gruppe;
+                          const altAktiv = alt.optional_aktiv;
+                          return (
+                            <>
+                              <tr key={base.id} className={`transition-colors ${altAktiv ? 'opacity-30' : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'}`}>
+                                <td className="px-4 py-3 text-gray-400 dark:text-gray-500 text-xs whitespace-nowrap">{base.position_nr || '–'}</td>
+                                <td className={`px-4 py-3 dark:text-gray-200 ${altAktiv ? 'line-through text-gray-400' : 'text-gray-800'}`}>{base.beschreibung}</td>
+                                <td className="px-4 py-3 text-right text-gray-500 dark:text-gray-400 whitespace-nowrap">{base.menge != null ? `${base.menge} ${base.einheit || ''}`.trim() : '–'}</td>
+                                <td className="px-4 py-3 text-right text-gray-500 dark:text-gray-400 whitespace-nowrap">{base.einzelpreis != null ? formatEuro(base.einzelpreis) : '–'}</td>
+                                <td className={`px-4 py-3 text-right font-medium whitespace-nowrap ${altAktiv ? 'line-through text-gray-300 dark:text-gray-600' : 'text-gray-900 dark:text-white'}`}>{formatEuro(base.gesamtpreis)}</td>
+                                <td className="px-4 py-3 text-center">
+                                  {!altAktiv && (
+                                    <button onClick={() => toggleEigenleistung(base.id, base.eigenleistung)} title={base.eigenleistung ? 'Als Fremdleistung markieren' : 'Als Eigenleistung markieren'}
+                                      className={`w-8 h-8 rounded-full border-2 flex items-center justify-center mx-auto transition-all text-sm font-bold ${base.eigenleistung ? 'bg-green-500 border-green-500 text-white' : 'border-gray-300 dark:border-gray-600 text-transparent hover:border-green-400 hover:text-green-400'}`}>✓</button>
+                                  )}
+                                </td>
+                              </tr>
+                              <tr key={`oder-${base.id}`} className="bg-gray-50 dark:bg-gray-750">
+                                <td colSpan={6} className="px-4 py-1 text-center text-xs text-gray-400 dark:text-gray-500 font-medium tracking-widest">— ODER —</td>
+                              </tr>
+                              <tr key={alt.id} className={`transition-colors ${!altAktiv ? 'opacity-50' : 'bg-blue-50 dark:bg-blue-900/20'}`}>
+                                <td className="px-4 py-3 text-gray-400 dark:text-gray-500 text-xs whitespace-nowrap">{alt.position_nr || '–'}</td>
+                                <td className="px-4 py-3 text-gray-800 dark:text-gray-200">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400 font-medium shrink-0">Alternativ</span>
+                                    {alt.beschreibung}
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3 text-right text-gray-500 dark:text-gray-400 whitespace-nowrap">{alt.menge != null ? `${alt.menge} ${alt.einheit || ''}`.trim() : '–'}</td>
+                                <td className="px-4 py-3 text-right text-gray-500 dark:text-gray-400 whitespace-nowrap">{alt.einzelpreis != null ? formatEuro(alt.einzelpreis) : '–'}</td>
+                                <td className={`px-4 py-3 text-right font-medium whitespace-nowrap ${altAktiv ? 'text-blue-700 dark:text-blue-300' : 'text-gray-900 dark:text-white'}`}>{formatEuro(alt.gesamtpreis)}</td>
+                                <td className="px-4 py-3 text-center">
+                                  <button onClick={() => toggleOptionalAktiv(alt.id, alt.optional_aktiv)} title={altAktiv ? 'Basis-Position wiederherstellen' : 'Als Alternative wählen'}
+                                    className={`w-8 h-8 rounded-full border-2 flex items-center justify-center mx-auto transition-all text-sm font-bold ${altAktiv ? 'bg-blue-500 border-blue-500 text-white' : 'border-gray-300 dark:border-gray-600 text-gray-400 hover:border-blue-400 hover:text-blue-500'}`}>↔</button>
+                                </td>
+                              </tr>
+                            </>
+                          );
+                        }
+                      })}
                     </tbody>
                   </table>
                 </div>
