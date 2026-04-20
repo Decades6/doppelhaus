@@ -311,7 +311,7 @@ ${zeilen}
                           key={p.id}
                           className={`transition-colors ${
                             p.eigenleistung ? 'bg-green-50 dark:bg-green-900/20' :
-                            (p.eventual || p.alternativ) && !eventualEinschliessen ? 'opacity-40' :
+                            (p.eventual || p.alternativ) && !p.optional_aktiv ? 'opacity-40' :
                             'hover:bg-gray-50 dark:hover:bg-gray-700/50'
                           }`}
                         >
