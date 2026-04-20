@@ -133,39 +133,39 @@ export default function Dashboard() {
 
       {/* Preis-Übersicht */}
       <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-4 mb-8">
-        <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-blue-500">
-          <div className="text-sm text-gray-500 dark:text-gray-300 mb-1">Gesamtangebot</div>
-          <div className="text-2xl font-bold text-gray-900">{formatEuro(gesamtsumme)}</div>
-          <div className="text-xs text-gray-400 dark:text-gray-300 mt-1">{positionen.length} Positionen</div>
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border-l-4 border-blue-500">
+          <div className="text-sm text-gray-500 dark:text-gray-400 mb-1">Gesamtangebot</div>
+          <div className="text-2xl font-bold text-gray-900 dark:text-white">{formatEuro(gesamtsumme)}</div>
+          <div className="text-xs text-gray-400 dark:text-gray-400 mt-1">{positionen.length} Positionen</div>
         </div>
-        <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-green-500">
-          <div className="text-sm text-gray-500 dark:text-gray-300 mb-1">Ersparnis durch Eigenleistung</div>
-          <div className="text-2xl font-bold text-green-600">{formatEuro(eigenleistungSumme)}</div>
-          <div className="text-xs text-gray-400 dark:text-gray-300 mt-1">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border-l-4 border-green-500">
+          <div className="text-sm text-gray-500 dark:text-gray-400 mb-1">Ersparnis durch Eigenleistung</div>
+          <div className="text-2xl font-bold text-green-600 dark:text-green-400">{formatEuro(eigenleistungSumme)}</div>
+          <div className="text-xs text-gray-400 dark:text-gray-400 mt-1">
             {positionen.filter(p => p.eigenleistung).length} Positionen markiert
           </div>
         </div>
-        <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-orange-500">
-          <div className="text-sm text-gray-500 dark:text-gray-300 mb-1">Verbleibend für Bauträger</div>
-          <div className="text-2xl font-bold text-orange-600">{formatEuro(verbleibend)}</div>
-          <div className="text-xs text-gray-400 dark:text-gray-300 mt-1">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border-l-4 border-orange-500">
+          <div className="text-sm text-gray-500 dark:text-gray-400 mb-1">Verbleibend für Bauträger</div>
+          <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">{formatEuro(verbleibend)}</div>
+          <div className="text-xs text-gray-400 dark:text-gray-400 mt-1">
             {gesamtsumme > 0 ? Math.round((eigenleistungSumme / gesamtsumme) * 100) : 0}% Eigenleistungsanteil
           </div>
         </div>
-        <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-gray-400">
-          <div className="text-sm text-gray-500 dark:text-gray-300 mb-1">zzgl. 19 % MwSt.</div>
-          <div className="text-2xl font-bold text-gray-700">{formatEuro(mwst)}</div>
-          <div className="text-xs text-gray-400 dark:text-gray-300 mt-1">auf Bauträger-Anteil</div>
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border-l-4 border-gray-400">
+          <div className="text-sm text-gray-500 dark:text-gray-400 mb-1">zzgl. 19 % MwSt.</div>
+          <div className="text-2xl font-bold text-gray-700 dark:text-white">{formatEuro(mwst)}</div>
+          <div className="text-xs text-gray-400 dark:text-gray-400 mt-1">auf Bauträger-Anteil</div>
         </div>
-        <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-gray-800">
-          <div className="text-sm text-gray-500 dark:text-gray-300 mb-1">Brutto gesamt</div>
-          <div className="text-2xl font-bold text-gray-900">{formatEuro(brutto)}</div>
-          <div className="text-xs text-gray-400 dark:text-gray-300 mt-1">inkl. MwSt.</div>
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border-l-4 border-gray-800 dark:border-gray-500">
+          <div className="text-sm text-gray-500 dark:text-gray-400 mb-1">Brutto gesamt</div>
+          <div className="text-2xl font-bold text-gray-900 dark:text-white">{formatEuro(brutto)}</div>
+          <div className="text-xs text-gray-400 dark:text-gray-400 mt-1">inkl. MwSt.</div>
         </div>
       </div>
 
       {/* Hinweis */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 mb-6 text-sm text-blue-700">
+      <div className="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-lg px-4 py-3 mb-6 text-sm text-blue-700 dark:text-blue-300">
         Klicke auf das Kreis-Symbol rechts bei einer Position um sie als <strong>Eigenleistung</strong> zu markieren.
         Der Preis wird dann aus der Gesamtberechnung herausgerechnet.
       </div>
@@ -179,17 +179,21 @@ export default function Dashboard() {
             .filter(p => p.eigenleistung)
             .reduce((sum, p) => sum + p.gesamtpreis, 0);
           const isOffen = offeneGewerke.has(gewerk);
+          const gwNummer = gwPositionen.find(p => p.position_nr)?.position_nr?.split('.')[0];
 
           return (
-            <div key={gewerk} className="bg-white rounded-xl shadow-sm overflow-hidden">
+            <div key={gewerk} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden">
               <button
                 onClick={() => toggleGewerk(gewerk)}
-                className="w-full bg-gray-50 px-6 py-4 flex items-center justify-between border-b border-gray-100 hover:bg-gray-100 transition-colors text-left"
+                className="w-full bg-gray-50 dark:bg-gray-700 px-6 py-4 flex items-center justify-between border-b border-gray-100 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors text-left"
               >
                 <div className="flex items-center gap-3">
-                  <span className="text-gray-400">{isOffen ? '▼' : '▶'}</span>
-                  <h3 className="font-semibold text-gray-800">{gewerk}</h3>
-                  <span className="text-xs text-gray-400 bg-gray-200 px-2 py-0.5 rounded-full">
+                  <span className="text-gray-400 dark:text-gray-300">{isOffen ? '▼' : '▶'}</span>
+                  {gwNummer && (
+                    <span className="text-xs font-mono font-medium text-gray-400 dark:text-gray-500 w-5 text-right shrink-0">{gwNummer}</span>
+                  )}
+                  <h3 className="font-semibold text-gray-800 dark:text-white">{gewerk}</h3>
+                  <span className="text-xs text-gray-400 dark:text-gray-300 bg-gray-200 dark:bg-gray-600 px-2 py-0.5 rounded-full">
                     {gwPositionen.length} Pos.
                   </span>
                 </div>
@@ -207,7 +211,7 @@ export default function Dashboard() {
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="text-xs text-gray-500 border-b border-gray-100">
+                      <tr className="text-xs text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-600">
                         <th className="px-4 py-2 text-left font-medium w-20">Pos.</th>
                         <th className="px-4 py-2 text-left font-medium">Beschreibung</th>
                         <th className="px-4 py-2 text-right font-medium w-28">Menge</th>
@@ -221,21 +225,21 @@ export default function Dashboard() {
                         <tr
                           key={p.id}
                           className={`transition-colors ${
-                            p.eigenleistung ? 'bg-green-50' : 'hover:bg-gray-50'
+                            p.eigenleistung ? 'bg-green-50 dark:bg-green-900/20' : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'
                           }`}
                         >
-                          <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">
+                          <td className="px-4 py-3 text-gray-400 dark:text-gray-500 text-xs whitespace-nowrap">
                             {p.position_nr || '–'}
                           </td>
-                          <td className="px-4 py-3 text-gray-800">{p.beschreibung}</td>
-                          <td className="px-4 py-3 text-right text-gray-500 whitespace-nowrap">
+                          <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.beschreibung}</td>
+                          <td className="px-4 py-3 text-right text-gray-500 dark:text-gray-400 whitespace-nowrap">
                             {p.menge != null ? `${p.menge} ${p.einheit || ''}`.trim() : '–'}
                           </td>
-                          <td className="px-4 py-3 text-right text-gray-500 whitespace-nowrap">
+                          <td className="px-4 py-3 text-right text-gray-500 dark:text-gray-400 whitespace-nowrap">
                             {p.einzelpreis != null ? formatEuro(p.einzelpreis) : '–'}
                           </td>
                           <td className={`px-4 py-3 text-right font-medium whitespace-nowrap ${
-                            p.eigenleistung ? 'line-through text-gray-300' : 'text-gray-900'
+                            p.eigenleistung ? 'line-through text-gray-300 dark:text-gray-600' : 'text-gray-900 dark:text-white'
                           }`}>
                             {formatEuro(p.gesamtpreis)}
                           </td>

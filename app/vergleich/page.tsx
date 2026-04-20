@@ -85,11 +85,11 @@ function vergleiche(alt: Position[], neu: Position[]): VergleichZeile[] {
 }
 
 const BADGE: Record<Aenderungstyp, { label: string; bg: string; text: string; row: string }> = {
-  neu:          { label: 'Neu',          bg: 'bg-green-100',  text: 'text-green-700',  row: 'bg-green-50' },
-  entfernt:     { label: 'Entfernt',     bg: 'bg-red-100',    text: 'text-red-700',    row: 'bg-red-50' },
-  preis:        { label: 'Preis',        bg: 'bg-orange-100', text: 'text-orange-700', row: 'bg-orange-50' },
-  beschreibung: { label: 'Beschreibung', bg: 'bg-blue-100',   text: 'text-blue-700',   row: 'bg-blue-50' },
-  unveraendert: { label: '',             bg: '',              text: '',                row: '' },
+  neu:          { label: 'Neu',          bg: 'bg-green-100 dark:bg-green-900/40',  text: 'text-green-700 dark:text-green-400',  row: 'bg-green-50 dark:bg-green-900/20' },
+  entfernt:     { label: 'Entfernt',     bg: 'bg-red-100 dark:bg-red-900/40',      text: 'text-red-700 dark:text-red-400',      row: 'bg-red-50 dark:bg-red-900/20' },
+  preis:        { label: 'Preis',        bg: 'bg-orange-100 dark:bg-orange-900/40',text: 'text-orange-700 dark:text-orange-400',row: 'bg-orange-50 dark:bg-orange-900/20' },
+  beschreibung: { label: 'Beschreibung', bg: 'bg-blue-100 dark:bg-blue-900/40',    text: 'text-blue-700 dark:text-blue-400',    row: 'bg-blue-50 dark:bg-blue-900/20' },
+  unveraendert: { label: '',             bg: '',                                    text: '',                                    row: '' },
 };
 
 export default function VergleichPage() {
@@ -182,13 +182,13 @@ export default function VergleichPage() {
       </div>
 
       {/* Versionsauswahl */}
-      <div className="bg-white rounded-xl shadow-sm p-4 mb-6 flex flex-wrap items-center gap-4">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-4 mb-6 flex flex-wrap items-center gap-4">
         <div className="flex items-center gap-2">
           <span className="text-sm text-gray-700 dark:text-gray-200 font-medium">Basis:</span>
           <select
             value={basisId}
             onChange={e => setBasisId(e.target.value)}
-            className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400"
+            className="text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100"
           >
             {versionen.map(v => (
               <option key={v.id} value={v.id} disabled={v.id === neuId}>
@@ -197,13 +197,13 @@ export default function VergleichPage() {
             ))}
           </select>
         </div>
-        <span className="text-gray-400">→</span>
+        <span className="text-gray-400 dark:text-gray-500">→</span>
         <div className="flex items-center gap-2">
           <span className="text-sm text-gray-700 dark:text-gray-200 font-medium">Neu:</span>
           <select
             value={neuId}
             onChange={e => setNeuId(e.target.value)}
-            className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400"
+            className="text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100"
           >
             {versionen.map(v => (
               <option key={v.id} value={v.id} disabled={v.id === basisId}>
@@ -220,35 +220,35 @@ export default function VergleichPage() {
         <>
           {/* Zusammenfassung */}
           <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
-            <div className="bg-white rounded-xl shadow-sm p-5 border-l-4 border-gray-400">
-              <div className="text-sm text-gray-500 mb-1">Preisdifferenz</div>
-              <div className={`text-2xl font-bold ${gesamtDifferenz >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 border-l-4 border-gray-400">
+              <div className="text-sm text-gray-500 dark:text-gray-400 mb-1">Preisdifferenz</div>
+              <div className={`text-2xl font-bold ${gesamtDifferenz >= 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
                 {gesamtDifferenz >= 0 ? '+' : ''}{formatEuro(gesamtDifferenz)}
               </div>
-              <div className="text-xs text-gray-400 mt-1">Netto</div>
+              <div className="text-xs text-gray-400 dark:text-gray-500 mt-1">Netto</div>
             </div>
-            <div className="bg-white rounded-xl shadow-sm p-5 border-l-4 border-blue-400">
-              <div className="text-sm text-gray-500 mb-1">Netto gesamt (neu)</div>
-              <div className="text-2xl font-bold text-gray-800">{formatEuro(neuGesamtNetto)}</div>
-              <div className="text-xs text-gray-400 mt-1">{neuVersion?.name}</div>
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 border-l-4 border-blue-400">
+              <div className="text-sm text-gray-500 dark:text-gray-400 mb-1">Netto gesamt (neu)</div>
+              <div className="text-2xl font-bold text-gray-800 dark:text-white">{formatEuro(neuGesamtNetto)}</div>
+              <div className="text-xs text-gray-400 dark:text-gray-500 mt-1">{neuVersion?.name}</div>
             </div>
-            <div className="bg-white rounded-xl shadow-sm p-5 border-l-4 border-gray-300">
-              <div className="text-sm text-gray-500 mb-1">zzgl. 19 % MwSt.</div>
-              <div className="text-2xl font-bold text-gray-700">{formatEuro(neuMwst)}</div>
-              <div className="text-xs text-gray-400 mt-1">auf neue Version</div>
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 border-l-4 border-gray-300">
+              <div className="text-sm text-gray-500 dark:text-gray-400 mb-1">zzgl. 19 % MwSt.</div>
+              <div className="text-2xl font-bold text-gray-700 dark:text-white">{formatEuro(neuMwst)}</div>
+              <div className="text-xs text-gray-400 dark:text-gray-500 mt-1">auf neue Version</div>
             </div>
-            <div className="bg-white rounded-xl shadow-sm p-5 border-l-4 border-gray-800">
-              <div className="text-sm text-gray-500 mb-1">Brutto gesamt (neu)</div>
-              <div className="text-2xl font-bold text-gray-900">{formatEuro(neuBrutto)}</div>
-              <div className="text-xs text-gray-400 mt-1">inkl. MwSt.</div>
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 border-l-4 border-gray-800 dark:border-gray-500">
+              <div className="text-sm text-gray-500 dark:text-gray-400 mb-1">Brutto gesamt (neu)</div>
+              <div className="text-2xl font-bold text-gray-900 dark:text-white">{formatEuro(neuBrutto)}</div>
+              <div className="text-xs text-gray-400 dark:text-gray-500 mt-1">inkl. MwSt.</div>
             </div>
-            <div className="bg-white rounded-xl shadow-sm p-5 border-l-4 border-green-500">
-              <div className="text-sm text-gray-500 mb-1">Neue Positionen</div>
-              <div className="text-2xl font-bold text-green-600">+{anzahlNeu}</div>
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 border-l-4 border-green-500">
+              <div className="text-sm text-gray-500 dark:text-gray-400 mb-1">Neue Positionen</div>
+              <div className="text-2xl font-bold text-green-600 dark:text-green-400">+{anzahlNeu}</div>
             </div>
-            <div className="bg-white rounded-xl shadow-sm p-5 border-l-4 border-red-500">
-              <div className="text-sm text-gray-500 mb-1">Entfernte / Geändert</div>
-              <div className="text-2xl font-bold text-red-600">{anzahlEntfernt + anzahlPreis}</div>
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 border-l-4 border-red-500">
+              <div className="text-sm text-gray-500 dark:text-gray-400 mb-1">Entfernte / Geändert</div>
+              <div className="text-2xl font-bold text-red-600 dark:text-red-400">{anzahlEntfernt + anzahlPreis}</div>
             </div>
           </div>
 
@@ -266,8 +266,8 @@ export default function VergleichPage() {
                 onClick={() => setFilter(key)}
                 className={`text-sm px-3 py-1.5 rounded-lg border transition-colors ${
                   filter === key
-                    ? 'bg-gray-800 text-white border-gray-800'
-                    : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'
+                    ? 'bg-gray-800 dark:bg-gray-200 text-white dark:text-gray-900 border-gray-800 dark:border-gray-200'
+                    : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-400'
                 }`}
               >
                 {label}
@@ -280,13 +280,17 @@ export default function VergleichPage() {
             {gewerke.map(gewerk => {
               const gwZeilen = gefilterteZeilen.filter(z => z.gewerk === gewerk);
               const gwDiff = gwZeilen.reduce((sum, z) => sum + z.differenz, 0);
+              const gwNummer = gwZeilen.find(z => z.position_nr)?.position_nr?.split('.')[0];
 
               return (
-                <div key={gewerk} className="bg-white rounded-xl shadow-sm overflow-hidden">
-                  <div className="bg-gray-50 px-6 py-3 border-b border-gray-100 flex items-center justify-between">
+                <div key={gewerk} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden">
+                  <div className="bg-gray-50 dark:bg-gray-700 px-6 py-3 border-b border-gray-100 dark:border-gray-600 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <h3 className="font-semibold text-gray-800">{gewerk}</h3>
-                      <span className="text-xs text-gray-400 bg-gray-200 px-2 py-0.5 rounded-full">
+                      {gwNummer && (
+                        <span className="text-xs font-mono font-medium text-gray-400 dark:text-gray-500 w-5 text-right shrink-0">{gwNummer}</span>
+                      )}
+                      <h3 className="font-semibold text-gray-800 dark:text-white">{gewerk}</h3>
+                      <span className="text-xs text-gray-400 dark:text-gray-300 bg-gray-200 dark:bg-gray-600 px-2 py-0.5 rounded-full">
                         {gwZeilen.length} Pos.
                       </span>
                     </div>
@@ -300,7 +304,7 @@ export default function VergleichPage() {
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
-                        <tr className="text-xs text-gray-500 border-b border-gray-100">
+                        <tr className="text-xs text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-600">
                           <th className="px-4 py-2 text-left font-medium w-20">Pos.</th>
                           <th className="px-4 py-2 text-left font-medium">Beschreibung</th>
                           <th className="px-4 py-2 text-right font-medium w-32">Basis</th>
@@ -314,27 +318,27 @@ export default function VergleichPage() {
                           const stil = BADGE[z.aenderung];
                           return (
                             <tr key={z.key} className={stil.row}>
-                              <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">
+                              <td className="px-4 py-3 text-gray-400 dark:text-gray-500 text-xs whitespace-nowrap">
                                 {z.position_nr || '–'}
                               </td>
-                              <td className="px-4 py-3 text-gray-800">
+                              <td className="px-4 py-3 text-gray-800 dark:text-gray-200">
                                 {z.aenderung === 'beschreibung' ? (
                                   <div>
-                                    <div className="line-through text-gray-400 text-xs">{z.beschreibung_alt}</div>
+                                    <div className="line-through text-gray-400 dark:text-gray-500 text-xs">{z.beschreibung_alt}</div>
                                     <div>{z.beschreibung_neu}</div>
                                   </div>
                                 ) : (
                                   z.beschreibung_neu ?? z.beschreibung_alt
                                 )}
                               </td>
-                              <td className="px-4 py-3 text-right text-gray-500 whitespace-nowrap">
+                              <td className="px-4 py-3 text-right text-gray-500 dark:text-gray-400 whitespace-nowrap">
                                 {z.gesamtpreis_alt != null ? formatEuro(z.gesamtpreis_alt) : '–'}
                               </td>
-                              <td className="px-4 py-3 text-right font-medium whitespace-nowrap text-gray-900">
+                              <td className="px-4 py-3 text-right font-medium whitespace-nowrap text-gray-900 dark:text-white">
                                 {z.gesamtpreis_neu != null ? formatEuro(z.gesamtpreis_neu) : '–'}
                               </td>
                               <td className={`px-4 py-3 text-right font-semibold whitespace-nowrap ${
-                                z.differenz > 0 ? 'text-red-600' : z.differenz < 0 ? 'text-green-600' : 'text-gray-400'
+                                z.differenz > 0 ? 'text-red-600 dark:text-red-400' : z.differenz < 0 ? 'text-green-600 dark:text-green-400' : 'text-gray-400 dark:text-gray-500'
                               }`}>
                                 {z.differenz !== 0
                                   ? `${z.differenz > 0 ? '+' : ''}${formatEuro(z.differenz)}`
