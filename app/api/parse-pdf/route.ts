@@ -114,10 +114,12 @@ function parseLeistungsverzeichnis(text: string): ParsedPosition[] {
       descRaw  = firstLine.replace(unitMatch[0], '').trim();
     }
 
-    // Zweite Zeile als Titelfortsetzung anhängen falls kein Langtext/Preis
-    const langTextRx = /^[•\-]|^(bestehend|inkl\.|einschl\.|komplett|liefern|montieren|gemäß|nach DIN|für |Ausführung|Herstellung)/i;
+    // Zweite Zeile anhängen nur wenn erste Zeile unvollständig endet (Verbindungswort)
+    const verbindungswoerter = new Set(['mit', 'und', 'für', 'von', 'zu', 'als', 'der', 'die', 'das', 'des', 'bei', 'an', 'in', 'auf', 'aus', 'nach', 'über', 'unter', 'oder', 'je', 'pro']);
+    const letztesWort = descRaw.trim().split(/\s+/).pop()?.toLowerCase().replace(/[^a-zäöüß]/g, '') ?? '';
+    const langTextRx = /^[•\-]|^(bestehend|inkl\.|einschl\.|komplett|liefern|montieren|gemäß|nach DIN|Ausführung|Herstellung)/i;
     const zweiteZeile = block.lines[1];
-    if (zweiteZeile && !langTextRx.test(zweiteZeile) && !priceLineRx.test(zweiteZeile)) {
+    if (zweiteZeile && verbindungswoerter.has(letztesWort) && !langTextRx.test(zweiteZeile) && !priceLineRx.test(zweiteZeile)) {
       descRaw += ' ' + zweiteZeile;
     }
 
