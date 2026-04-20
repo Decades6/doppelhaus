@@ -174,7 +174,7 @@ function parseLeistungsverzeichnis(text: string): ParsedPosition[] {
     descRaw = sammleTitel(block.lines, descRaw);
 
     const beschreibung = bereinigeBeschreibung(
-      descRaw.replace(/\d{1,3}(?:\.\d{3})*,\d{2}/g, '').trim()
+      descRaw.replace(/\s*\d{1,3}(?:\.\d{3})*,\d{2}\s*$/g, '').trim()
     );
 
     positionen.push({
