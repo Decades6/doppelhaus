@@ -106,10 +106,11 @@ export default function UploadPage() {
     setFehler('');
 
     // Neue Version anlegen
+    const { data: { user } } = await supabase.auth.getUser();
     const versionName = name || dateiname || `Angebot ${new Date().toLocaleDateString('de-DE')}`;
     const { data: version, error: versionFehler } = await supabase
       .from('versionen')
-      .insert({ name: versionName })
+      .insert({ name: versionName, user_id: user?.id })
       .select()
       .single();
 
