@@ -378,7 +378,7 @@ ${zeilen}
                           const altAktiv = alt.optional_aktiv;
                           return (
                             <>
-                              <tr key={base.id} className={`transition-colors ${altAktiv ? 'opacity-30' : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'}`}>
+                              <tr key={base.id} className={`border-l-2 border-blue-300 dark:border-blue-600 transition-colors ${altAktiv ? 'opacity-30' : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'}`}>
                                 <td className="px-4 py-3 text-gray-400 dark:text-gray-500 text-xs whitespace-nowrap">{base.position_nr || '–'}</td>
                                 <td className={`px-4 py-3 dark:text-gray-200 ${altAktiv ? 'line-through text-gray-400' : 'text-gray-800'}`}>{base.beschreibung}</td>
                                 <td className="px-4 py-3 text-right text-gray-500 dark:text-gray-400 whitespace-nowrap">{base.menge != null ? `${base.menge} ${base.einheit || ''}`.trim() : '–'}</td>
@@ -391,11 +391,13 @@ ${zeilen}
                                   )}
                                 </td>
                               </tr>
-                              <tr key={`oder-${base.id}`} className="bg-gray-50 dark:bg-gray-750">
-                                <td colSpan={6} className="px-4 py-1 text-center text-xs text-gray-400 dark:text-gray-500 font-medium tracking-widest">— ODER —</td>
-                              </tr>
-                              <tr key={alt.id} className={`transition-colors ${!altAktiv ? 'opacity-50' : 'bg-blue-50 dark:bg-blue-900/20'}`}>
-                                <td className="px-4 py-3 text-gray-400 dark:text-gray-500 text-xs whitespace-nowrap">{alt.position_nr || '–'}</td>
+                              <tr key={alt.id} className={`border-l-2 border-blue-300 dark:border-blue-600 transition-colors ${!altAktiv ? 'opacity-50' : 'bg-blue-50 dark:bg-blue-900/20'}`}>
+                                <td className="px-4 py-3 whitespace-nowrap">
+                                  <div className="flex flex-col items-start gap-0.5">
+                                    <span className="text-[10px] font-semibold text-blue-400 dark:text-blue-500 uppercase tracking-wide leading-none">oder</span>
+                                    <span className="text-xs text-gray-400 dark:text-gray-500">{alt.position_nr || '–'}</span>
+                                  </div>
+                                </td>
                                 <td className="px-4 py-3 text-gray-800 dark:text-gray-200">
                                   <div className="flex items-center gap-2">
                                     <span className="text-xs px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400 font-medium shrink-0">Alternativ</span>
