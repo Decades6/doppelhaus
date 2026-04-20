@@ -132,6 +132,7 @@ export default function UploadPage() {
         gesamtpreis: p.gesamtpreis,
         eigenleistung: false,
         eventual: p.eventual ?? false,
+        alternativ: p.alternativ ?? false,
       }))
     );
 

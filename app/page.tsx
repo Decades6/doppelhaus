@@ -125,9 +125,10 @@ ${zeilen}
     });
   }
 
-  const aktivPositionen = positionen.filter(p => !p.eventual || eventualEinschliessen);
-  const eventualPositionen = positionen.filter(p => p.eventual);
-  const eventualSumme = eventualPositionen.reduce((sum, p) => sum + p.gesamtpreis, 0);
+  const istOptional = (p: Position) => (p.eventual || p.alternativ) && !eventualEinschliessen;
+  const aktivPositionen = positionen.filter(p => !istOptional(p));
+  const optionalPositionen = positionen.filter(p => p.eventual || p.alternativ);
+  const eventualSumme = optionalPositionen.reduce((sum, p) => sum + p.gesamtpreis, 0);
 
   const gesamtsumme = aktivPositionen.reduce((sum, p) => sum + p.gesamtpreis, 0);
   const eigenleistungSumme = aktivPositionen
@@ -239,10 +240,10 @@ ${zeilen}
       </div>
 
       {/* Eventual-Banner */}
-      {eventualPositionen.length > 0 && (
+      {optionalPositionen.length > 0 && (
         <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg px-4 py-3 mb-6 flex items-center justify-between gap-4">
           <div className="text-sm text-yellow-800 dark:text-yellow-300">
-            <strong>{eventualPositionen.length} Eventual-Positionen</strong> ({formatEuro(eventualSumme)}) sind ausgegraut und nicht in der Gesamtsumme enthalten.
+            <strong>{optionalPositionen.length} optionale Positionen</strong> (Eventual / Alternativ, {formatEuro(eventualSumme)}) sind ausgegraut und nicht in der Gesamtsumme enthalten.
           </div>
           <button
             onClick={() => setEventualEinschliessen(prev => !prev)}
@@ -316,7 +317,7 @@ ${zeilen}
                           key={p.id}
                           className={`transition-colors ${
                             p.eigenleistung ? 'bg-green-50 dark:bg-green-900/20' :
-                            p.eventual && !eventualEinschliessen ? 'opacity-40' :
+                            (p.eventual || p.alternativ) && !eventualEinschliessen ? 'opacity-40' :
                             'hover:bg-gray-50 dark:hover:bg-gray-700/50'
                           }`}
                         >
@@ -327,6 +328,9 @@ ${zeilen}
                             <div className="flex items-center gap-2">
                               {p.eventual && (
                                 <span className="text-xs px-1.5 py-0.5 rounded bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400 font-medium shrink-0">Eventual</span>
+                              )}
+                              {p.alternativ && (
+                                <span className="text-xs px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400 font-medium shrink-0">Alternativ</span>
                               )}
                               {p.beschreibung}
                             </div>

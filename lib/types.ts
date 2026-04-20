@@ -16,6 +16,7 @@ export interface Position {
   gesamtpreis: number;
   eigenleistung: boolean;
   eventual: boolean;
+  alternativ: boolean;
   created_at: string;
 }
 
@@ -28,4 +29,5 @@ export interface ParsedPosition {
   einzelpreis?: number;
   gesamtpreis: number;
   eventual?: boolean;
+  alternativ?: boolean;
 }

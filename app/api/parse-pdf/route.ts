@@ -77,12 +77,14 @@ function parseLeistungsverzeichnis(text: string): ParsedPosition[] {
 
   for (const block of blocks) {
     const fullText = block.lines.join(' ');
-    const isEventual = /\bEventual\b/.test(fullText) || parenthesizedRx.test(fullText);
+    const isEventual  = /\bEventual\b/.test(fullText) && parenthesizedRx.test(fullText);
+    const isAlternativ = /\bAlternativ\b/.test(fullText) && parenthesizedRx.test(fullText);
+    const isOptional  = isEventual || isAlternativ;
 
     let gesamtpreis: number;
     let einzelpreis: number | undefined;
 
-    if (isEventual) {
+    if (isOptional) {
       const parenthMatch = fullText.match(parenthesizedPriceRx);
       if (!parenthMatch) continue;
       gesamtpreis = parseGermanNumber(parenthMatch[1]);
@@ -125,6 +127,7 @@ function parseLeistungsverzeichnis(text: string): ParsedPosition[] {
       einzelpreis,
       gesamtpreis,
       eventual    : isEventual,
+      alternativ  : isAlternativ,
     });
   }
 
