@@ -123,6 +123,7 @@ function parseLeistungsverzeichnis(text: string): ParsedPosition[] {
       const mitBindestrich = prev.endsWith('-');
       const istFortsetzung = mitBindestrich
         || prev.endsWith(',')
+        || prev.endsWith('/')
         || /[=\d]\s*$/.test(prev)
         || verbindungswoerter.has(letztesWort);
       const naechste = block.lines[j];
