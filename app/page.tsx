@@ -13,6 +13,19 @@ function formatDatum(iso: string): string {
   return new Date(iso).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
+function comparePositionNr(a: string | null, b: string | null): number {
+  if (!a && !b) return 0;
+  if (!a) return 1;
+  if (!b) return -1;
+  const partsA = a.split('.').map(Number);
+  const partsB = b.split('.').map(Number);
+  for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
+    const diff = (partsA[i] || 0) - (partsB[i] || 0);
+    if (diff !== 0) return diff;
+  }
+  return 0;
+}
+
 export default function Dashboard() {
   const [positionen, setPositionen] = useState<Position[]>([]);
   const [aktuelleVersion, setAktuelleVersion] = useState<Version | null>(null);
@@ -82,7 +95,11 @@ export default function Dashboard() {
   const mwst = verbleibend * 0.19;
   const brutto = verbleibend * 1.19;
 
-  const gewerke = [...new Set(positionen.map(p => p.gewerk))];
+  const gewerke = [...new Set(positionen.map(p => p.gewerk))].sort((a, b) => {
+    const aNr = positionen.find(p => p.gewerk === a && p.position_nr)?.position_nr ?? null;
+    const bNr = positionen.find(p => p.gewerk === b && p.position_nr)?.position_nr ?? null;
+    return comparePositionNr(aNr, bNr);
+  });
 
   if (loading) {
     return (
