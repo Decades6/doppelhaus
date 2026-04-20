@@ -260,7 +260,9 @@ ${zeilen}
       {/* Positionen nach Gewerk */}
       <div className="space-y-4">
         {gewerke.map(gewerk => {
-          const gwPositionen = positionen.filter(p => p.gewerk === gewerk);
+          const gwPositionen = positionen
+            .filter(p => p.gewerk === gewerk)
+            .sort((a, b) => comparePositionNr(a.position_nr, b.position_nr));
           const gwSumme = gwPositionen.reduce((sum, p) => sum + p.gesamtpreis, 0);
           const gwEigenleistung = gwPositionen
             .filter(p => p.eigenleistung)
