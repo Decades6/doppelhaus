@@ -116,11 +116,15 @@ function parseLeistungsverzeichnis(text: string): ParsedPosition[] {
 
     // Zweite Zeile anhängen nur wenn erste Zeile unvollständig endet (Verbindungswort)
     const verbindungswoerter = new Set(['mit', 'und', 'für', 'von', 'zu', 'als', 'der', 'die', 'das', 'des', 'bei', 'an', 'in', 'auf', 'aus', 'nach', 'über', 'unter', 'oder', 'je', 'pro']);
-    const letztesWort = descRaw.trim().split(/\s+/).pop()?.toLowerCase().replace(/[^a-zäöüß]/g, '') ?? '';
+    const descTrimmed = descRaw.trim();
+    const letztesWort = descTrimmed.split(/\s+/).pop()?.toLowerCase().replace(/[^a-zäöüß]/g, '') ?? '';
+    const endetMitBindestrich = descTrimmed.endsWith('-');
+    const endetMitZahlOderGleich = /[=\d]\s*$/.test(descTrimmed);
     const langTextRx = /^[•\-]|^(bestehend|inkl\.|einschl\.|komplett|liefern|montieren|gemäß|nach DIN|Ausführung|Herstellung)/i;
     const zweiteZeile = block.lines[1];
-    if (zweiteZeile && verbindungswoerter.has(letztesWort) && !langTextRx.test(zweiteZeile) && !priceLineRx.test(zweiteZeile)) {
-      descRaw += ' ' + zweiteZeile;
+    const istFortsetzung = verbindungswoerter.has(letztesWort) || endetMitBindestrich || endetMitZahlOderGleich;
+    if (zweiteZeile && istFortsetzung && !langTextRx.test(zweiteZeile) && !priceLineRx.test(zweiteZeile)) {
+      descRaw += (endetMitBindestrich ? '' : ' ') + zweiteZeile;
     }
 
     const beschreibung = bereinigeBeschreibung(
