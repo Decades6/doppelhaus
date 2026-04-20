@@ -32,6 +32,7 @@ export default function Dashboard() {
   const [versionsAnzahl, setVersionsAnzahl] = useState(0);
   const [loading, setLoading] = useState(true);
   const [offeneGewerke, setOffeneGewerke] = useState<Set<string>>(new Set());
+  const [eventualEinschliessen, setEventualEinschliessen] = useState(false);
 
   useEffect(() => {
     loadDaten();
@@ -124,8 +125,12 @@ ${zeilen}
     });
   }
 
-  const gesamtsumme = positionen.reduce((sum, p) => sum + p.gesamtpreis, 0);
-  const eigenleistungSumme = positionen
+  const aktivPositionen = positionen.filter(p => !p.eventual || eventualEinschliessen);
+  const eventualPositionen = positionen.filter(p => p.eventual);
+  const eventualSumme = eventualPositionen.reduce((sum, p) => sum + p.gesamtpreis, 0);
+
+  const gesamtsumme = aktivPositionen.reduce((sum, p) => sum + p.gesamtpreis, 0);
+  const eigenleistungSumme = aktivPositionen
     .filter(p => p.eigenleistung)
     .reduce((sum, p) => sum + p.gesamtpreis, 0);
   const verbleibend = gesamtsumme - eigenleistungSumme;
@@ -228,10 +233,29 @@ ${zeilen}
       </div>
 
       {/* Hinweis */}
-      <div className="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-lg px-4 py-3 mb-6 text-sm text-blue-700 dark:text-blue-300">
+      <div className="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-lg px-4 py-3 mb-4 text-sm text-blue-700 dark:text-blue-300">
         Klicke auf das Kreis-Symbol rechts bei einer Position um sie als <strong>Eigenleistung</strong> zu markieren.
         Der Preis wird dann aus der Gesamtberechnung herausgerechnet.
       </div>
+
+      {/* Eventual-Banner */}
+      {eventualPositionen.length > 0 && (
+        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg px-4 py-3 mb-6 flex items-center justify-between gap-4">
+          <div className="text-sm text-yellow-800 dark:text-yellow-300">
+            <strong>{eventualPositionen.length} Eventual-Positionen</strong> ({formatEuro(eventualSumme)}) sind ausgegraut und nicht in der Gesamtsumme enthalten.
+          </div>
+          <button
+            onClick={() => setEventualEinschliessen(prev => !prev)}
+            className={`text-sm px-4 py-1.5 rounded-lg border font-medium transition-colors shrink-0 ${
+              eventualEinschliessen
+                ? 'bg-yellow-500 border-yellow-500 text-white'
+                : 'bg-white dark:bg-gray-800 border-yellow-300 dark:border-yellow-600 text-yellow-700 dark:text-yellow-400 hover:border-yellow-500'
+            }`}
+          >
+            {eventualEinschliessen ? 'Eingeschlossen' : 'Einschließen'}
+          </button>
+        </div>
+      )}
 
       {/* Positionen nach Gewerk */}
       <div className="space-y-4">
@@ -289,13 +313,22 @@ ${zeilen}
                         <tr
                           key={p.id}
                           className={`transition-colors ${
-                            p.eigenleistung ? 'bg-green-50 dark:bg-green-900/20' : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                            p.eigenleistung ? 'bg-green-50 dark:bg-green-900/20' :
+                            p.eventual && !eventualEinschliessen ? 'opacity-40' :
+                            'hover:bg-gray-50 dark:hover:bg-gray-700/50'
                           }`}
                         >
                           <td className="px-4 py-3 text-gray-400 dark:text-gray-500 text-xs whitespace-nowrap">
                             {p.position_nr || '–'}
                           </td>
-                          <td className="px-4 py-3 text-gray-800 dark:text-gray-200">{p.beschreibung}</td>
+                          <td className="px-4 py-3 text-gray-800 dark:text-gray-200">
+                            <div className="flex items-center gap-2">
+                              {p.eventual && (
+                                <span className="text-xs px-1.5 py-0.5 rounded bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400 font-medium shrink-0">Eventual</span>
+                              )}
+                              {p.beschreibung}
+                            </div>
+                          </td>
                           <td className="px-4 py-3 text-right text-gray-500 dark:text-gray-400 whitespace-nowrap">
                             {p.menge != null ? `${p.menge} ${p.einheit || ''}`.trim() : '–'}
                           </td>

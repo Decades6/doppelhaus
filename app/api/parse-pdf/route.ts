@@ -73,24 +73,31 @@ function parseLeistungsverzeichnis(text: string): ParsedPosition[] {
   const unitList          = 'm²|m2|m³|m3|lfdm|lfm|mxWo\\.?|Woch\\.?|Wo\\.?|Stk\\.?|St\\.?|Psch\\.?|psch\\.?|kg|VE|Pkg\\.?|Std\\.?|qm|m';
   const unitRx            = new RegExp(`(\\d+(?:[,.]\\d+)?)\\s*(${unitList})(?=\\s|[A-ZÄÖÜ]|$)`, 'i');
 
+  const parenthesizedPriceRx = /\((\d{1,3}(?:\.\d{3})*,\d{2})\)/;
+
   for (const block of blocks) {
     const fullText = block.lines.join(' ');
-    if (/\b(Eventual|Alternativ)\b/.test(fullText)) continue;
-    if (parenthesizedRx.test(fullText)) continue;
+    const isEventual = /\bEventual\b/.test(fullText) || parenthesizedRx.test(fullText);
 
-    const priceLine = [...block.lines].reverse().find(l => priceLineRx.test(l));
-    if (!priceLine) continue;
-
-    const allPrices = [...priceLine.matchAll(priceRx)];
-    if (allPrices.length === 0) continue;
-
-    const gesamtpreis = parseGermanNumber(allPrices[allPrices.length - 1][1]);
-    if (gesamtpreis <= 0) continue;
-
+    let gesamtpreis: number;
     let einzelpreis: number | undefined;
-    if (allPrices.length >= 2) {
-      const ep = parseGermanNumber(allPrices[allPrices.length - 2][1]);
-      if (ep !== gesamtpreis) einzelpreis = ep;
+
+    if (isEventual) {
+      const parenthMatch = fullText.match(parenthesizedPriceRx);
+      if (!parenthMatch) continue;
+      gesamtpreis = parseGermanNumber(parenthMatch[1]);
+      if (gesamtpreis <= 0) continue;
+    } else {
+      const priceLine = [...block.lines].reverse().find(l => priceLineRx.test(l));
+      if (!priceLine) continue;
+      const allPrices = [...priceLine.matchAll(priceRx)];
+      if (allPrices.length === 0) continue;
+      gesamtpreis = parseGermanNumber(allPrices[allPrices.length - 1][1]);
+      if (gesamtpreis <= 0) continue;
+      if (allPrices.length >= 2) {
+        const ep = parseGermanNumber(allPrices[allPrices.length - 2][1]);
+        if (ep !== gesamtpreis) einzelpreis = ep;
+      }
     }
 
     const firstLine = block.lines[0].replace(posNrRx3, '').replace(posNrRx2, '').trim();
@@ -117,6 +124,7 @@ function parseLeistungsverzeichnis(text: string): ParsedPosition[] {
       einheit,
       einzelpreis,
       gesamtpreis,
+      eventual    : isEventual,
     });
   }
 
