@@ -124,7 +124,7 @@ function parseLeistungsverzeichnis(text: string): ParsedPosition[] {
       const istFortsetzung = mitBindestrich
         || prev.endsWith(',')
         || prev.endsWith('/')
-        || /[=\d]\s*$/.test(prev)
+        || /=\d+\s*$/.test(prev)
         || verbindungswoerter.has(letztesWort);
       const naechste = block.lines[j];
       if (!naechste || !istFortsetzung || langTextRx.test(naechste) || priceLineRx.test(naechste)) break;
