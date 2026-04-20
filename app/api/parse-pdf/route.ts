@@ -114,12 +114,11 @@ function parseLeistungsverzeichnis(text: string): ParsedPosition[] {
       descRaw  = firstLine.replace(unitMatch[0], '').trim();
     }
 
-    // Mehrzeilige Titel: Zeilen sammeln bis Langtext oder Preis beginnt
+    // Zweite Zeile als Titelfortsetzung anhängen falls kein Langtext/Preis
     const langTextRx = /^[•\-]|^(bestehend|inkl\.|einschl\.|komplett|liefern|montieren|gemäß|nach DIN|für |Ausführung|Herstellung)/i;
-    for (let j = 1; j < block.lines.length - 1; j++) {
-      const line = block.lines[j];
-      if (!line || langTextRx.test(line) || priceLineRx.test(line)) break;
-      descRaw += ' ' + line;
+    const zweiteZeile = block.lines[1];
+    if (zweiteZeile && !langTextRx.test(zweiteZeile) && !priceLineRx.test(zweiteZeile)) {
+      descRaw += ' ' + zweiteZeile;
     }
 
     const beschreibung = bereinigeBeschreibung(
