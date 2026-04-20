@@ -17,6 +17,7 @@ export interface Position {
   eigenleistung: boolean;
   eventual: boolean;
   alternativ: boolean;
+  optional_aktiv: boolean;
   created_at: string;
 }
 

@@ -32,7 +32,6 @@ export default function Dashboard() {
   const [versionsAnzahl, setVersionsAnzahl] = useState(0);
   const [loading, setLoading] = useState(true);
   const [offeneGewerke, setOffeneGewerke] = useState<Set<string>>(new Set());
-  const [eventualEinschliessen, setEventualEinschliessen] = useState(false);
 
   useEffect(() => {
     loadDaten();
@@ -66,6 +65,11 @@ export default function Dashboard() {
       setOffeneGewerke(gewerke);
     }
     setLoading(false);
+  }
+
+  async function toggleOptionalAktiv(id: string, current: boolean) {
+    await supabase.from('positionen').update({ optional_aktiv: !current }).eq('id', id);
+    setPositionen(prev => prev.map(p => (p.id === id ? { ...p, optional_aktiv: !current } : p)));
   }
 
   async function toggleEigenleistung(id: string, current: boolean) {
@@ -125,10 +129,11 @@ ${zeilen}
     });
   }
 
-  const istOptional = (p: Position) => (p.eventual || p.alternativ) && !eventualEinschliessen;
+  const istOptional = (p: Position) => (p.eventual || p.alternativ) && !p.optional_aktiv;
   const aktivPositionen = positionen.filter(p => !istOptional(p));
   const optionalPositionen = positionen.filter(p => p.eventual || p.alternativ);
-  const eventualSumme = optionalPositionen.reduce((sum, p) => sum + p.gesamtpreis, 0);
+  const optionalNichtAktiv = optionalPositionen.filter(p => !p.optional_aktiv);
+  const eventualSumme = optionalNichtAktiv.reduce((sum, p) => sum + p.gesamtpreis, 0);
 
   const gesamtsumme = aktivPositionen.reduce((sum, p) => sum + p.gesamtpreis, 0);
   const eigenleistungSumme = aktivPositionen
@@ -241,20 +246,9 @@ ${zeilen}
 
       {/* Eventual-Banner */}
       {optionalPositionen.length > 0 && (
-        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg px-4 py-3 mb-6 flex items-center justify-between gap-4">
-          <div className="text-sm text-yellow-800 dark:text-yellow-300">
-            <strong>{optionalPositionen.length} optionale Positionen</strong> (Eventual / Alternativ, {formatEuro(eventualSumme)}) sind ausgegraut und nicht in der Gesamtsumme enthalten.
-          </div>
-          <button
-            onClick={() => setEventualEinschliessen(prev => !prev)}
-            className={`text-sm px-4 py-1.5 rounded-lg border font-medium transition-colors shrink-0 ${
-              eventualEinschliessen
-                ? 'bg-yellow-500 border-yellow-500 text-white'
-                : 'bg-white dark:bg-gray-800 border-yellow-300 dark:border-yellow-600 text-yellow-700 dark:text-yellow-400 hover:border-yellow-500'
-            }`}
-          >
-            {eventualEinschliessen ? 'Eingeschlossen' : 'Einschließen'}
-          </button>
+        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg px-4 py-3 mb-6 text-sm text-yellow-800 dark:text-yellow-300">
+          <strong>{optionalPositionen.length} optionale Positionen</strong> (Eventual / Alternativ) — nutze den <strong>+</strong>-Button bei einer Position um sie einzeln ins Angebot aufzunehmen.
+          {eventualSumme > 0 && <span className="ml-2 text-yellow-600 dark:text-yellow-400">Noch nicht aufgenommen: {formatEuro(eventualSumme)}</span>}
         </div>
       )}
 
@@ -347,17 +341,31 @@ ${zeilen}
                             {formatEuro(p.gesamtpreis)}
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <button
-                              onClick={() => toggleEigenleistung(p.id, p.eigenleistung)}
-                              title={p.eigenleistung ? 'Als Fremdleistung markieren' : 'Als Eigenleistung markieren'}
-                              className={`w-8 h-8 rounded-full border-2 flex items-center justify-center mx-auto transition-all text-sm font-bold ${
-                                p.eigenleistung
-                                  ? 'bg-green-500 border-green-500 text-white'
-                                  : 'border-gray-300 text-transparent hover:border-green-400 hover:text-green-400'
-                              }`}
-                            >
-                              ✓
-                            </button>
+                            {(p.eventual || p.alternativ) ? (
+                              <button
+                                onClick={() => toggleOptionalAktiv(p.id, p.optional_aktiv)}
+                                title={p.optional_aktiv ? 'Aus Angebot entfernen' : 'Ins Angebot aufnehmen'}
+                                className={`w-8 h-8 rounded-full border-2 flex items-center justify-center mx-auto transition-all text-sm font-bold ${
+                                  p.optional_aktiv
+                                    ? 'bg-yellow-500 border-yellow-500 text-white'
+                                    : 'border-gray-300 dark:border-gray-600 text-gray-400 hover:border-yellow-400 hover:text-yellow-500'
+                                }`}
+                              >
+                                +
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => toggleEigenleistung(p.id, p.eigenleistung)}
+                                title={p.eigenleistung ? 'Als Fremdleistung markieren' : 'Als Eigenleistung markieren'}
+                                className={`w-8 h-8 rounded-full border-2 flex items-center justify-center mx-auto transition-all text-sm font-bold ${
+                                  p.eigenleistung
+                                    ? 'bg-green-500 border-green-500 text-white'
+                                    : 'border-gray-300 dark:border-gray-600 text-transparent hover:border-green-400 hover:text-green-400'
+                                }`}
+                              >
+                                ✓
+                              </button>
+                            )}
                           </td>
                         </tr>
                       ))}
