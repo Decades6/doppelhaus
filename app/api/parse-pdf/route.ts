@@ -3,25 +3,91 @@ import { ParsedPosition } from '@/lib/types';
 
 export const maxDuration = 30;
 
+// ─── Reguläre Ausdrücke ───────────────────────────────────────────────────────
+
+const PREIS_RX            = /(\d{1,3}(?:\.\d{3})*,\d{2})/g;
+const PREIS_ZEILE_RX      = /\d{1,3}(?:\.\d{3})*,\d{2}\s*$/;
+const PREIS_KLAMMER_RX    = /\((\d{1,3}(?:\.\d{3})*,\d{2})\)/;
+const PREIS_IN_KLAMMER_RX = /\(\d{1,3}(?:\.\d{3})*,\d{2}\)/;
+
+const POS_NR_3_RX = /^(\d+\.\d+\.\d+(?:\.\d+)*\.)/;
+const POS_NR_2_RX = /^(\d+\.\d+\.)(?=\d)/;
+const GEWERK_RX   = /^(\d+\.\d+\.)([A-ZÄÖÜa-zäöüß].{3,})/;
+const SKIP_RX     = /^(Summe \d|Zwischensumme|Nettosumme|Bruttosumme|zzgl\.|MwSt)/i;
+const CLOSING_RX  = /^(Summe |Zwischensumme )/i;
+
+const EINHEIT_LIST = 'm²|m2|m³|m3|lfdm|lfm|mxWo\\.?|Woch\\.?|Wo\\.?|Stk\\.?|St\\.?|Psch\\.?|psch\\.?|kg|VE|Pkg\\.?|Std\\.?|qm|m';
+const EINHEIT_RX   = new RegExp(`(\\d+(?:[,.]\\d+)?)\\s*(${EINHEIT_LIST})(?=\\s|[A-ZÄÖÜ]|$)`, 'i');
+
+// Zeichen/Wörter die anzeigen dass ein Titel auf der nächsten Zeile weitergeht
+const VERBINDUNGSWOERTER = new Set([
+  'mit', 'und', 'für', 'von', 'zu', 'als',
+  'der', 'die', 'das', 'des',
+  'bei', 'an', 'in', 'auf', 'aus', 'nach', 'über', 'unter',
+  'oder', 'je', 'pro',
+]);
+
+// Zeilenanfänge die auf Langtext (nicht Titel) hinweisen
+const LANGTEXT_RX = /^[•\-]|^(bestehend|inkl\.|einschl\.|komplett|liefern|montieren|gemäß|nach DIN|Ausführung|Herstellung)/i;
+
+// ─── Hilfsfunktionen ─────────────────────────────────────────────────────────
+
 function parseGermanNumber(str: string): number {
   return parseFloat(str.replace(/\./g, '').replace(',', '.'));
 }
 
-// Bereinigt Einheiten-Reste die am Anfang der Beschreibung kleben
+/** Entfernt Einheiten-Reste die am Anfang der Beschreibung kleben bleiben */
 function bereinigeBeschreibung(text: string): string {
   return text
-    // Bekannte mehrbuchstabige Einheiten-Reste
-    .replace(/^ück\.?\s*/i, '')       // "Stück" → "ück"
-    .replace(/^tück\.?\s*/i, '')      // "Stück" Variante
-    .replace(/^och\.?\s*/i, '')       // "Woch." → "och"
-    .replace(/^xWo\.?\s*/i, '')       // "mxWo." → "xWo"
-    .replace(/^Wo\.?\s*(?=[A-ZÄÖÜ])/, '') // "Wo." vor Großbuchstabe
-    // Generisch: 1–4 Kleinbuchstaben (mit optionalem Punkt) vor Großbuchstabe
-    // Fängt "m", "dm", "d.", "g", etc. ab
+    .replace(/^ück\.?\s*/i, '')
+    .replace(/^tück\.?\s*/i, '')
+    .replace(/^och\.?\s*/i, '')
+    .replace(/^xWo\.?\s*/i, '')
+    .replace(/^Wo\.?\s*(?=[A-ZÄÖÜ])/, '')
     .replace(/^[a-zäöü]{1,4}\.?\s*(?=[A-ZÄÖÜ])/, '')
     .replace(/\s+/g, ' ')
     .trim();
 }
+
+/** Gibt true zurück wenn die Zeile unvollständig endet und die nächste Zeile
+ *  zum Titel gehört. Erkannte Fälle:
+ *  - Bindestrich am Ende:   "ISO-"  → "Kimmstein b=175 mm"
+ *  - Komma am Ende:         "d=180 mm,"  → "punktweise fixiert"
+ *  - Schrägstrich am Ende:  "LK 4/"  → "W09"
+ *  - Offene Klammer:        "(bis"  → "200/200mm)"
+ *  - Maß mit = am Ende:     "d=120"  → "mm"
+ *  - Verbindungswort:       "Anlage mit"  → "16,38 kWp"
+ */
+function istTitelFortsetzung(zeile: string): boolean {
+  const z = zeile.trim();
+  if (!z) return false;
+
+  if (z.endsWith('-')) return true;
+  if (z.endsWith(',')) return true;
+  if (z.endsWith('/')) return true;
+  if (/=\d+\s*$/.test(z)) return true;
+
+  const offeneKlammern = (z.match(/\(/g) ?? []).length > (z.match(/\)/g) ?? []).length;
+  if (offeneKlammern) return true;
+
+  const letztesWort = z.split(/\s+/).pop()?.toLowerCase().replace(/[^a-zäöüß]/g, '') ?? '';
+  if (VERBINDUNGSWOERTER.has(letztesWort)) return true;
+
+  return false;
+}
+
+/** Sammelt mehrzeilige Titel aus den Block-Zeilen (max. 3 Fortsetzungszeilen) */
+function sammleTitel(lines: string[], descRaw: string): string {
+  for (let j = 1; j <= 3 && j < lines.length - 1; j++) {
+    if (!istTitelFortsetzung(descRaw)) break;
+    const naechste = lines[j];
+    if (!naechste || LANGTEXT_RX.test(naechste) || PREIS_ZEILE_RX.test(naechste)) break;
+    descRaw += (descRaw.trim().endsWith('-') ? '' : ' ') + naechste;
+  }
+  return descRaw;
+}
+
+// ─── Parser ──────────────────────────────────────────────────────────────────
 
 function parseLeistungsverzeichnis(text: string): ParsedPosition[] {
   const positionen: ParsedPosition[] = [];
@@ -34,28 +100,23 @@ function parseLeistungsverzeichnis(text: string): ParsedPosition[] {
 
   const lines = clean.split('\n').map(l => l.trim());
 
-  const gewerkRx  = /^(\d+\.\d+\.)([A-ZÄÖÜa-zäöüß].{3,})/;
-  const skipRx    = /^(Summe \d|Zwischensumme|Nettosumme|Bruttosumme|zzgl\.|MwSt)/i;
-  const posNrRx3  = /^(\d+\.\d+\.\d+(?:\.\d+)*\.)/;
-  const posNrRx2  = /^(\d+\.\d+\.)(?=\d)/;
-  const closingRx = /^(Summe |Zwischensumme )/i;
-
+  // Positionen in Blöcke gruppieren
   let currentGewerk = 'Allgemein';
   const blocks: { posNr: string; gewerk: string; lines: string[] }[] = [];
   let current: { posNr: string; gewerk: string; lines: string[] } | null = null;
 
   for (const line of lines) {
     if (!line) continue;
-    if (closingRx.test(line) || skipRx.test(line)) {
+    if (CLOSING_RX.test(line) || SKIP_RX.test(line)) {
       if (current) { blocks.push(current); current = null; }
       continue;
     }
-    const gwMatch = line.match(gewerkRx);
-    if (gwMatch && !posNrRx3.test(line) && !posNrRx2.test(line)) {
+    const gwMatch = line.match(GEWERK_RX);
+    if (gwMatch && !POS_NR_3_RX.test(line) && !POS_NR_2_RX.test(line)) {
       currentGewerk = gwMatch[2].trim();
       continue;
     }
-    const posMatch = line.match(posNrRx3) || line.match(posNrRx2);
+    const posMatch = line.match(POS_NR_3_RX) || line.match(POS_NR_2_RX);
     if (posMatch) {
       if (current) blocks.push(current);
       current = { posNr: posMatch[1], gewerk: currentGewerk, lines: [line] };
@@ -65,73 +126,52 @@ function parseLeistungsverzeichnis(text: string): ParsedPosition[] {
   }
   if (current) blocks.push(current);
 
-  const priceRx           = /(\d{1,3}(?:\.\d{3})*,\d{2})/g;
-  const parenthesizedRx   = /\(\d{1,3}(?:\.\d{3})*,\d{2}\)/;
-  const priceLineRx       = /\d{1,3}(?:\.\d{3})*,\d{2}\s*$/;
-  // Einheiten: spezifische zuerst, generisches "m" zuletzt
-  // Lookahead (?=\s|[A-ZÄÖÜ]|$) erlaubt Einheit direkt vor Großbuchstabe (zusammengeklebt)
-  const unitList          = 'm²|m2|m³|m3|lfdm|lfm|mxWo\\.?|Woch\\.?|Wo\\.?|Stk\\.?|St\\.?|Psch\\.?|psch\\.?|kg|VE|Pkg\\.?|Std\\.?|qm|m';
-  const unitRx            = new RegExp(`(\\d+(?:[,.]\\d+)?)\\s*(${unitList})(?=\\s|[A-ZÄÖÜ]|$)`, 'i');
-
-  const parenthesizedPriceRx = /\((\d{1,3}(?:\.\d{3})*,\d{2})\)/;
-
+  // Blöcke in Positionen umwandeln
   for (const block of blocks) {
     const fullText = block.lines.join(' ');
-    const isEventual  = /\bEventual\b/.test(fullText) && parenthesizedRx.test(fullText);
-    const isAlternativ = /\bAlternativ\b/.test(fullText) && parenthesizedRx.test(fullText);
-    const isOptional  = isEventual || isAlternativ;
 
+    // Eventual / Alternativ erkennen (Preis steht in Klammern)
+    const isEventual   = /\bEventual\b/.test(fullText)  && PREIS_IN_KLAMMER_RX.test(fullText);
+    const isAlternativ = /\bAlternativ\b/.test(fullText) && PREIS_IN_KLAMMER_RX.test(fullText);
+    const isOptional   = isEventual || isAlternativ;
+
+    // Preis ermitteln
     let gesamtpreis: number;
     let einzelpreis: number | undefined;
 
     if (isOptional) {
-      const parenthMatch = fullText.match(parenthesizedPriceRx);
-      if (!parenthMatch) continue;
-      gesamtpreis = parseGermanNumber(parenthMatch[1]);
+      const m = fullText.match(PREIS_KLAMMER_RX);
+      if (!m) continue;
+      gesamtpreis = parseGermanNumber(m[1]);
       if (gesamtpreis <= 0) continue;
     } else {
-      const priceLine = [...block.lines].reverse().find(l => priceLineRx.test(l));
-      if (!priceLine) continue;
-      const allPrices = [...priceLine.matchAll(priceRx)];
-      if (allPrices.length === 0) continue;
-      gesamtpreis = parseGermanNumber(allPrices[allPrices.length - 1][1]);
+      const preisZeile = [...block.lines].reverse().find(l => PREIS_ZEILE_RX.test(l));
+      if (!preisZeile) continue;
+      const allePreise = [...preisZeile.matchAll(PREIS_RX)];
+      if (allePreise.length === 0) continue;
+      gesamtpreis = parseGermanNumber(allePreise[allePreise.length - 1][1]);
       if (gesamtpreis <= 0) continue;
-      if (allPrices.length >= 2) {
-        const ep = parseGermanNumber(allPrices[allPrices.length - 2][1]);
+      if (allePreise.length >= 2) {
+        const ep = parseGermanNumber(allePreise[allePreise.length - 2][1]);
         if (ep !== gesamtpreis) einzelpreis = ep;
       }
     }
 
-    const firstLine = block.lines[0].replace(posNrRx3, '').replace(posNrRx2, '').trim();
-    const unitMatch = firstLine.match(unitRx);
+    // Menge, Einheit und Beschreibung aus der ersten Zeile extrahieren
+    const firstLine = block.lines[0].replace(POS_NR_3_RX, '').replace(POS_NR_2_RX, '').trim();
+    const unitMatch  = firstLine.match(EINHEIT_RX);
     let menge: number | undefined;
     let einheit: string | undefined;
     let descRaw = firstLine;
 
     if (unitMatch) {
-      menge    = parseGermanNumber(unitMatch[1]);
-      einheit  = unitMatch[2];
-      descRaw  = firstLine.replace(unitMatch[0], '').trim();
+      menge   = parseGermanNumber(unitMatch[1]);
+      einheit = unitMatch[2];
+      descRaw = firstLine.replace(unitMatch[0], '').trim();
     }
 
-    // Titelfortsetzungen sammeln (max. 3 Zeilen) solange Zeile unvollständig endet
-    const verbindungswoerter = new Set(['mit', 'und', 'für', 'von', 'zu', 'als', 'der', 'die', 'das', 'des', 'bei', 'an', 'in', 'auf', 'aus', 'nach', 'über', 'unter', 'oder', 'je', 'pro']);
-    const langTextRx = /^[•\-]|^(bestehend|inkl\.|einschl\.|komplett|liefern|montieren|gemäß|nach DIN|Ausführung|Herstellung)/i;
-    for (let j = 1; j <= 3 && j < block.lines.length - 1; j++) {
-      const prev = descRaw.trim();
-      const letztesWort = prev.split(/\s+/).pop()?.toLowerCase().replace(/[^a-zäöüß]/g, '') ?? '';
-      const mitBindestrich = prev.endsWith('-');
-      const offeneKlammern = (prev.match(/\(/g) ?? []).length > (prev.match(/\)/g) ?? []).length;
-      const istFortsetzung = mitBindestrich
-        || prev.endsWith(',')
-        || prev.endsWith('/')
-        || offeneKlammern
-        || /=\d+\s*$/.test(prev)
-        || verbindungswoerter.has(letztesWort);
-      const naechste = block.lines[j];
-      if (!naechste || !istFortsetzung || langTextRx.test(naechste) || priceLineRx.test(naechste)) break;
-      descRaw += (mitBindestrich ? '' : ' ') + naechste;
-    }
+    // Mehrzeiligen Titel zusammensetzen
+    descRaw = sammleTitel(block.lines, descRaw);
 
     const beschreibung = bereinigeBeschreibung(
       descRaw.replace(/\d{1,3}(?:\.\d{3})*,\d{2}/g, '').trim()
@@ -152,6 +192,8 @@ function parseLeistungsverzeichnis(text: string): ParsedPosition[] {
 
   return positionen;
 }
+
+// ─── API Route ────────────────────────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
   try {
