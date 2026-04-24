@@ -167,11 +167,14 @@ export default function VergleichPage() {
     return z.aenderung === filter;
   });
 
-  const pflichtig       = (z: VergleichZeile) => !z.eventual && !z.alternativ;
-  const gesamtDifferenz = zeilen.filter(pflichtig).reduce((sum, z) => sum + z.differenz, 0);
-  const neuGesamtNetto  = zeilen.filter(pflichtig).reduce((sum, z) => sum + (z.gesamtpreis_neu ?? 0), 0);
-  const neuMwst         = neuGesamtNetto * 0.19;
-  const neuBrutto       = neuGesamtNetto * 1.19;
+  const pflichtig           = (z: VergleichZeile) => !z.eventual && !z.alternativ;
+  const neuGesamtNettoCalc  = zeilen.filter(pflichtig).reduce((sum, z) => sum + (z.gesamtpreis_neu ?? 0), 0);
+  const altGesamtNettoCalc  = zeilen.filter(pflichtig).reduce((sum, z) => sum + (z.gesamtpreis_alt ?? 0), 0);
+  const neuGesamtNetto      = neuVersion?.nettosumme ?? neuGesamtNettoCalc;
+  const altGesamtNetto      = basisVersion?.nettosumme ?? altGesamtNettoCalc;
+  const gesamtDifferenz     = neuGesamtNetto - altGesamtNetto;
+  const neuMwst             = neuGesamtNetto * 0.19;
+  const neuBrutto           = neuGesamtNetto * 1.19;
   const anzahlNeu      = zeilen.filter(z => z.aenderung === 'neu').length;
   const anzahlEntfernt = zeilen.filter(z => z.aenderung === 'entfernt').length;
   const anzahlPreis    = zeilen.filter(z => z.aenderung === 'preis').length;

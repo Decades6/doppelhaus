@@ -2,6 +2,7 @@ export interface Version {
   id: string;
   name: string;
   erstellt_am: string;
+  nettosumme: number | null;
 }
 
 export interface Position {

@@ -18,6 +18,7 @@ export default function UploadPage() {
   const [fehler, setFehler] = useState('');
   const [positionen, setPositionen] = useState<ParsedPosition[]>([]);
   const [dateiname, setDateiname] = useState('');
+  const [nettosumme, setNettosumme] = useState<number | null>(null);
 
   async function handleDateiWahl(file: File) {
     if (!file || file.type !== 'application/pdf') {
@@ -59,7 +60,7 @@ export default function UploadPage() {
         return;
       }
 
-      await speichernMitDaten(json.positionen as ParsedPosition[], file.name);
+      await speichernMitDaten(json.positionen as ParsedPosition[], file.name, typeof json.nettosumme === 'number' ? json.nettosumme : null);
     } catch (e) {
       setFehler('Unerwarteter Fehler: ' + String(e));
       setLaden(false);
@@ -100,17 +101,18 @@ export default function UploadPage() {
     ]);
   }
 
-  async function speichernMitDaten(daten: ParsedPosition[], name?: string) {
+  async function speichernMitDaten(daten: ParsedPosition[], name?: string, ns: number | null = null) {
     const gueltige = daten.filter(p => p.beschreibung.trim() && p.gesamtpreis >= 0);
     setLaden(true);
     setFehler('');
+    if (ns !== null) setNettosumme(ns);
 
     // Neue Version anlegen
     const { data: { user } } = await supabase.auth.getUser();
     const versionName = name || dateiname || `Angebot ${new Date().toLocaleDateString('de-DE')}`;
     const { data: version, error: versionFehler } = await supabase
       .from('versionen')
-      .insert({ name: versionName, user_id: user?.id })
+      .insert({ name: versionName, user_id: user?.id, nettosumme: ns })
       .select()
       .single();
 

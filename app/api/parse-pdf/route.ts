@@ -89,8 +89,15 @@ function sammleTitel(lines: string[], descRaw: string): string {
 
 // ─── Parser ──────────────────────────────────────────────────────────────────
 
-function parseLeistungsverzeichnis(text: string): ParsedPosition[] {
+function leseNettosumme(text: string): number | null {
+  const match = text.match(/Nettosumme\s+([\d.]+,\d{2})/);
+  if (match) return parseGermanNumber(match[1]);
+  return null;
+}
+
+function parseLeistungsverzeichnis(text: string): { positionen: ParsedPosition[]; nettosumme: number | null } {
   const positionen: ParsedPosition[] = [];
+  const nettosumme = leseNettosumme(text);
 
   const clean = text
     .replace(/Angebot[^\n]*\n/g, '')
@@ -190,7 +197,7 @@ function parseLeistungsverzeichnis(text: string): ParsedPosition[] {
     });
   }
 
-  return positionen;
+  return { positionen, nettosumme };
 }
 
 // ─── API Route ────────────────────────────────────────────────────────────────
@@ -214,9 +221,9 @@ export async function POST(request: NextRequest) {
     const pdfParse  = pdfModule.default ?? pdfModule;
     const pdfData   = await pdfParse(buffer);
 
-    const positionen = parseLeistungsverzeichnis(pdfData.text);
+    const { positionen, nettosumme } = parseLeistungsverzeichnis(pdfData.text);
 
-    return NextResponse.json({ positionen, anzahl: positionen.length });
+    return NextResponse.json({ positionen, anzahl: positionen.length, nettosumme });
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     console.error('PDF parse error:', msg);
