@@ -269,7 +269,7 @@ export default function VergleichPage() {
                   </div>
                 </div>
                 {loeschenId === v.id ? (
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
                     <span className="text-xs text-red-600 dark:text-red-400">Wirklich löschen?</span>
                     <button
                       onClick={() => versionLoeschen(v.id)}
@@ -287,7 +287,7 @@ export default function VergleichPage() {
                   </div>
                 ) : (
                   <button
-                    onClick={() => setLoeschenId(v.id)}
+                    onClick={e => { e.stopPropagation(); setLoeschenId(v.id); }}
                     className="text-xs text-red-500 hover:text-red-700 px-3 py-1.5 rounded-lg border border-red-200 hover:border-red-400 transition-colors"
                   >
                     Löschen

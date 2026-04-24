@@ -67,6 +67,10 @@ export default function Dashboard() {
       .order('erstellt_am', { ascending: false });
 
     if (!versionen || versionen.length === 0) {
+      setAlleVersionen([]);
+      setAktuelleVersion(null);
+      setPositionen([]);
+      setVersionsAnzahl(0);
       setLoading(false);
       return;
     }
@@ -282,7 +286,7 @@ ${zeilen}
                   </div>
                 </div>
                 {loeschenId === v.id ? (
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
                     <span className="text-xs text-red-600 dark:text-red-400">Wirklich löschen?</span>
                     <button onClick={() => versionLoeschen(v.id)} disabled={loeschenLaden}
                       className="text-xs bg-red-600 text-white px-3 py-1.5 rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors">
@@ -294,7 +298,7 @@ ${zeilen}
                     </button>
                   </div>
                 ) : (
-                  <button onClick={() => setLoeschenId(v.id)}
+                  <button onClick={e => { e.stopPropagation(); setLoeschenId(v.id); }}
                     className="text-xs text-red-500 hover:text-red-700 px-3 py-1.5 rounded-lg border border-red-200 hover:border-red-400 transition-colors">
                     Löschen
                   </button>
