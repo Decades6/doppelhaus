@@ -90,8 +90,19 @@ function sammleTitel(lines: string[], descRaw: string): string {
 // ─── Parser ──────────────────────────────────────────────────────────────────
 
 function leseNettosumme(text: string): number | null {
-  const match = text.match(/Nettosumme\s+([\d.]+,\d{2})/);
-  if (match) return parseGermanNumber(match[1]);
+  const lines = text.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    if (/Nettosumme/i.test(lines[i])) {
+      // Zahl in dieser Zeile suchen
+      const m = lines[i].match(/(\d{1,3}(?:\.\d{3})*,\d{2})/);
+      if (m) return parseGermanNumber(m[1]);
+      // Zahl in der nächsten Zeile suchen
+      if (i + 1 < lines.length) {
+        const m2 = lines[i + 1].match(/(\d{1,3}(?:\.\d{3})*,\d{2})/);
+        if (m2) return parseGermanNumber(m2[1]);
+      }
+    }
+  }
   return null;
 }
 
