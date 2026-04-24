@@ -30,6 +30,13 @@ function formatDatum(iso: string): string {
   return new Date(iso).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
+function formatDatumMitUhrzeit(iso: string): string {
+  return new Date(iso).toLocaleString('de-DE', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  });
+}
+
 function comparePositionNr(a: string | null, b: string | null): number {
   if (!a && !b) return 0;
   if (!a) return 1;
@@ -253,7 +260,13 @@ export default function VergleichPage() {
               <div key={v.id} className="px-4 py-3 flex items-center justify-between">
                 <div>
                   <div className="text-sm font-medium text-gray-800 dark:text-gray-100">{v.name}</div>
-                  <div className="text-xs text-gray-400 dark:text-gray-500">{formatDatum(v.erstellt_am)}</div>
+                  <div className="text-xs text-gray-400 dark:text-gray-500">
+                    Hochgeladen: {formatDatumMitUhrzeit(v.erstellt_am)}
+                    {v.nettosumme != null
+                      ? <span className="ml-2 text-green-500">&#10003; Netto: {formatEuro(v.nettosumme)}</span>
+                      : <span className="ml-2 text-orange-400">&#9888; Bitte neu hochladen</span>
+                    }
+                  </div>
                 </div>
                 {loeschenId === v.id ? (
                   <div className="flex items-center gap-2">
