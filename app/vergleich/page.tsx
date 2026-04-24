@@ -18,6 +18,8 @@ interface VergleichZeile {
   gesamtpreis_neu?: number;
   differenz: number;
   aenderung: Aenderungstyp;
+  eventual: boolean;
+  alternativ: boolean;
 }
 
 function formatEuro(amount: number): string {
@@ -78,6 +80,8 @@ function vergleiche(alt: Position[], neu: Position[]): VergleichZeile[] {
       gesamtpreis_neu: n?.gesamtpreis,
       differenz: (n?.gesamtpreis ?? 0) - (a?.gesamtpreis ?? 0),
       aenderung,
+      eventual:  (n ?? a)!.eventual,
+      alternativ: (n ?? a)!.alternativ,
     });
   }
 
@@ -100,23 +104,39 @@ export default function VergleichPage() {
   const [laden, setLaden] = useState(true);
   const [vergleichLaden, setVergleichLaden] = useState(false);
   const [filter, setFilter] = useState<Filter>('aenderungen');
+  const [verwaltungOffen, setVerwaltungOffen] = useState(false);
+  const [loeschenId, setLoeschenId] = useState<string | null>(null);
+  const [loeschenLaden, setLoeschenLaden] = useState(false);
 
   useEffect(() => {
-    async function loadVersionen() {
-      const { data } = await supabase
-        .from('versionen')
-        .select('*')
-        .order('erstellt_am', { ascending: true });
-
-      if (data && data.length >= 2) {
-        setVersionen(data as Version[]);
-        setBasisId(data[data.length - 2].id);
-        setNeuId(data[data.length - 1].id);
-      }
-      setLaden(false);
-    }
     loadVersionen();
   }, []);
+
+  async function loadVersionen() {
+    const { data } = await supabase
+      .from('versionen')
+      .select('*')
+      .order('erstellt_am', { ascending: true });
+
+    if (data && data.length >= 2) {
+      setVersionen(data as Version[]);
+      setBasisId(data[data.length - 2].id);
+      setNeuId(data[data.length - 1].id);
+    } else if (data) {
+      setVersionen(data as Version[]);
+    }
+    setLaden(false);
+  }
+
+  async function versionLoeschen(id: string) {
+    setLoeschenLaden(true);
+    await supabase.from('positionen').delete().eq('version_id', id);
+    await supabase.from('versionen').delete().eq('id', id);
+    setLoeschenId(null);
+    setLoeschenLaden(false);
+    setZeilen([]);
+    await loadVersionen();
+  }
 
   useEffect(() => {
     if (basisId && neuId && basisId !== neuId) {
@@ -147,8 +167,9 @@ export default function VergleichPage() {
     return z.aenderung === filter;
   });
 
-  const gesamtDifferenz = zeilen.reduce((sum, z) => sum + z.differenz, 0);
-  const neuGesamtNetto  = zeilen.reduce((sum, z) => sum + (z.gesamtpreis_neu ?? 0), 0);
+  const pflichtig       = (z: VergleichZeile) => !z.eventual && !z.alternativ;
+  const gesamtDifferenz = zeilen.filter(pflichtig).reduce((sum, z) => sum + z.differenz, 0);
+  const neuGesamtNetto  = zeilen.filter(pflichtig).reduce((sum, z) => sum + (z.gesamtpreis_neu ?? 0), 0);
   const neuMwst         = neuGesamtNetto * 0.19;
   const neuBrutto       = neuGesamtNetto * 1.19;
   const anzahlNeu      = zeilen.filter(z => z.aenderung === 'neu').length;
@@ -212,6 +233,54 @@ export default function VergleichPage() {
             ))}
           </select>
         </div>
+      </div>
+
+      {/* Versionen verwalten */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm mb-6 overflow-hidden">
+        <button
+          onClick={() => setVerwaltungOffen(v => !v)}
+          className="w-full px-4 py-3 flex items-center justify-between text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+        >
+          <span className="font-medium">Versionen verwalten ({versionen.length})</span>
+          <span>{verwaltungOffen ? '▲' : '▼'}</span>
+        </button>
+        {verwaltungOffen && (
+          <div className="border-t border-gray-100 dark:border-gray-600 divide-y divide-gray-50 dark:divide-gray-700">
+            {versionen.map(v => (
+              <div key={v.id} className="px-4 py-3 flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-medium text-gray-800 dark:text-gray-100">{v.name}</div>
+                  <div className="text-xs text-gray-400 dark:text-gray-500">{formatDatum(v.erstellt_am)}</div>
+                </div>
+                {loeschenId === v.id ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-red-600 dark:text-red-400">Wirklich löschen?</span>
+                    <button
+                      onClick={() => versionLoeschen(v.id)}
+                      disabled={loeschenLaden}
+                      className="text-xs bg-red-600 text-white px-3 py-1.5 rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors"
+                    >
+                      {loeschenLaden ? '...' : 'Ja, löschen'}
+                    </button>
+                    <button
+                      onClick={() => setLoeschenId(null)}
+                      className="text-xs text-gray-500 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-gray-400 transition-colors"
+                    >
+                      Abbrechen
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setLoeschenId(v.id)}
+                    className="text-xs text-red-500 hover:text-red-700 px-3 py-1.5 rounded-lg border border-red-200 hover:border-red-400 transition-colors"
+                  >
+                    Löschen
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {vergleichLaden ? (

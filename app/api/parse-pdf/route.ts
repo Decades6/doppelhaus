@@ -131,8 +131,8 @@ function parseLeistungsverzeichnis(text: string): ParsedPosition[] {
     const fullText = block.lines.join(' ');
 
     // Eventual / Alternativ erkennen (Preis steht in Klammern)
-    const isEventual   = /\bEventual\b/.test(fullText)  && PREIS_IN_KLAMMER_RX.test(fullText);
-    const isAlternativ = /\bAlternativ\b/.test(fullText) && PREIS_IN_KLAMMER_RX.test(fullText);
+    const isEventual   = /\bEventual/i.test(fullText)  && PREIS_IN_KLAMMER_RX.test(fullText);
+    const isAlternativ = /\bAlternativ/i.test(fullText) && PREIS_IN_KLAMMER_RX.test(fullText);
     const isOptional   = isEventual || isAlternativ;
 
     // Preis ermitteln
