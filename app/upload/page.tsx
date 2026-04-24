@@ -3,14 +3,9 @@
 import { useState, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { ParsedPosition } from '@/lib/types';
-import { useRouter } from 'next/navigation';
-
-function formatEuro(amount: number): string {
-  return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(amount);
-}
+import { formatEuro } from '@/lib/utils';
 
 export default function UploadPage() {
-  const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [schritt, setSchritt] = useState<'upload' | 'pruefen' | 'speichern'>('upload');
@@ -18,7 +13,6 @@ export default function UploadPage() {
   const [fehler, setFehler] = useState('');
   const [positionen, setPositionen] = useState<ParsedPosition[]>([]);
   const [dateiname, setDateiname] = useState('');
-  const [nettosumme, setNettosumme] = useState<number | null>(null);
 
   async function handleDateiWahl(file: File) {
     if (!file || file.type !== 'application/pdf') {
@@ -105,7 +99,6 @@ export default function UploadPage() {
     const gueltige = daten.filter(p => p.beschreibung.trim() && p.gesamtpreis >= 0);
     setLaden(true);
     setFehler('');
-    if (ns !== null) setNettosumme(ns);
 
     // Neue Version anlegen
     const { data: { user } } = await supabase.auth.getUser();

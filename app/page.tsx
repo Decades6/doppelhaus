@@ -3,15 +3,9 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Position, Version } from '@/lib/types';
+import { formatEuro, formatDatum, comparePositionNr } from '@/lib/utils';
 import Link from 'next/link';
-
-function formatEuro(amount: number): string {
-  return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(amount);
-}
-
-function formatDatum(iso: string): string {
-  return new Date(iso).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
-}
+import VersionenVerwalten from '@/components/VersionenVerwalten';
 
 type Gruppe =
   | { type: 'single'; pos: Position }
@@ -32,19 +26,6 @@ function buildPaare(sorted: Position[]): Gruppe[] {
   return result;
 }
 
-function comparePositionNr(a: string | null, b: string | null): number {
-  if (!a && !b) return 0;
-  if (!a) return 1;
-  if (!b) return -1;
-  const partsA = a.split('.').map(Number);
-  const partsB = b.split('.').map(Number);
-  for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
-    const diff = (partsA[i] || 0) - (partsB[i] || 0);
-    if (diff !== 0) return diff;
-  }
-  return 0;
-}
-
 export default function Dashboard() {
   const [positionen, setPositionen] = useState<Position[]>([]);
   const [aktuelleVersion, setAktuelleVersion] = useState<Version | null>(null);
@@ -52,9 +33,6 @@ export default function Dashboard() {
   const [versionsAnzahl, setVersionsAnzahl] = useState(0);
   const [loading, setLoading] = useState(true);
   const [offeneGewerke, setOffeneGewerke] = useState<Set<string>>(new Set());
-  const [verwaltungOffen, setVerwaltungOffen] = useState(false);
-  const [loeschenId, setLoeschenId] = useState<string | null>(null);
-  const [loeschenLaden, setLoeschenLaden] = useState(false);
 
   useEffect(() => {
     loadDaten();
@@ -93,22 +71,6 @@ export default function Dashboard() {
       setOffeneGewerke(gewerke);
     }
     setLoading(false);
-  }
-
-  function formatDatumMitUhrzeit(iso: string): string {
-    return new Date(iso).toLocaleString('de-DE', {
-      day: '2-digit', month: '2-digit', year: 'numeric',
-      hour: '2-digit', minute: '2-digit',
-    });
-  }
-
-  async function versionLoeschen(id: string) {
-    setLoeschenLaden(true);
-    await supabase.from('positionen').delete().eq('version_id', id);
-    await supabase.from('versionen').delete().eq('id', id);
-    setLoeschenId(null);
-    setLoeschenLaden(false);
-    await loadDaten();
   }
 
   async function toggleOptionalAktiv(id: string, current: boolean) {
@@ -262,52 +224,7 @@ ${zeilen}
         </div>
       </div>
 
-      {/* Versionen verwalten */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm mb-6 overflow-hidden">
-        <button
-          onClick={() => setVerwaltungOffen(v => !v)}
-          className="w-full px-4 py-3 flex items-center justify-between text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-        >
-          <span className="font-medium">Versionen verwalten ({alleVersionen.length})</span>
-          <span>{verwaltungOffen ? '▲' : '▼'}</span>
-        </button>
-        {verwaltungOffen && (
-          <div className="border-t border-gray-100 dark:border-gray-600 divide-y divide-gray-50 dark:divide-gray-700">
-            {alleVersionen.map(v => (
-              <div key={v.id} className="px-4 py-3 flex items-center justify-between">
-                <div>
-                  <div className="text-sm font-medium text-gray-800 dark:text-gray-100">{v.name}</div>
-                  <div className="text-xs text-gray-400 dark:text-gray-500">
-                    Hochgeladen: {formatDatumMitUhrzeit(v.erstellt_am)}
-                    {v.nettosumme != null
-                      ? <span className="ml-2 text-green-500">&#10003; Netto: {formatEuro(v.nettosumme)}</span>
-                      : <span className="ml-2 text-orange-400">&#9888; Bitte neu hochladen</span>
-                    }
-                  </div>
-                </div>
-                {loeschenId === v.id ? (
-                  <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
-                    <span className="text-xs text-red-600 dark:text-red-400">Wirklich löschen?</span>
-                    <button onClick={() => versionLoeschen(v.id)} disabled={loeschenLaden}
-                      className="text-xs bg-red-600 text-white px-3 py-1.5 rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors">
-                      {loeschenLaden ? '...' : 'Ja, löschen'}
-                    </button>
-                    <button onClick={() => setLoeschenId(null)}
-                      className="text-xs text-gray-500 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-gray-400 transition-colors">
-                      Abbrechen
-                    </button>
-                  </div>
-                ) : (
-                  <button onClick={e => { e.stopPropagation(); setLoeschenId(v.id); }}
-                    className="text-xs text-red-500 hover:text-red-700 px-3 py-1.5 rounded-lg border border-red-200 hover:border-red-400 transition-colors">
-                    Löschen
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      <VersionenVerwalten versionen={alleVersionen} onGeloescht={loadDaten} />
 
       {/* Preis-Übersicht */}
       <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-4 mb-8">
