@@ -214,7 +214,6 @@ export default function KostenPage() {
                 </td>
                 <td className="px-6 py-2 text-right text-xs text-gray-400 dark:text-gray-500">
                   Netto: {formatEuro(version!.nettosumme! - eigenleistungGesamt)}
-                  {eigenleistungGesamt > 0 && <span className="ml-2 text-green-600 dark:text-green-500">(Eigenleistung: −{formatEuro(eigenleistungGesamt)})</span>}
                 </td>
               </tr>
             )}
