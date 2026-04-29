@@ -135,13 +135,14 @@ export default function KostenPage() {
     }, 800);
   }
 
-  const brutto = version?.nettosumme ? version.nettosumme * 1.19 : 0;
+  const eigenleistungGesamt = eigenleistungGewerke.reduce((s, g) => s + g.eigenleistung_summe, 0);
+  // Bauträger-Anteil: Gesamtnetto minus Eigenleistungen (netto), dann Brutto
+  const brutto = version?.nettosumme ? (version.nettosumme - eigenleistungGesamt) * 1.19 : 0;
   const grundstueckspreis = parseEingabe(grundstueckspreisEingabe);
   const vorschlagNebenkosten = grundstueckspreis > 0 ? Math.round(grundstueckspreis * 0.055 * 100) / 100 : 0;
   const vorschlagNotar = grundstueckspreis > 0 ? Math.round((grundstueckspreis + brutto) * 0.015 * 100) / 100 : 0;
-  const eigenleistungGesamt = eigenleistungGewerke.reduce((s, g) => s + g.eigenleistung_summe, 0);
   const manuelleGesamt = Object.values(kosten).reduce((s, v) => s + v, 0);
-  const gesamtFinanzierung = brutto - eigenleistungGesamt + manuelleGesamt;
+  const gesamtFinanzierung = brutto + manuelleGesamt;
 
   if (laden) return <div className="text-center py-16 text-gray-500">Lade Daten...</div>;
 
@@ -187,35 +188,14 @@ export default function KostenPage() {
             {brutto > 0 && (
               <tr>
                 <td className="px-6 py-2 pl-10 text-xs text-gray-400 dark:text-gray-500">
-                  Brutto inkl. 19% MwSt. — {version?.name}
+                  Brutto Bauträger-Anteil inkl. 19% MwSt. — {version?.name}
                 </td>
                 <td className="px-6 py-2 text-right text-xs text-gray-400 dark:text-gray-500">
-                  Netto: {version?.nettosumme ? formatEuro(version.nettosumme) : '–'}
+                  Netto: {formatEuro(version!.nettosumme! - eigenleistungGesamt)}
+                  {eigenleistungGesamt > 0 && <span className="ml-2 text-green-600 dark:text-green-500">(Eigenleistung: −{formatEuro(eigenleistungGesamt)})</span>}
                 </td>
               </tr>
             )}
-
-            {/* Eigenleistungen */}
-            <tr className="bg-green-50/50 dark:bg-green-900/10">
-              <td className="px-6 py-4 font-semibold text-gray-800 dark:text-white">
-                Eigenleistung
-                <span className="ml-2 text-xs font-normal text-gray-400">(Ersparnis vom Bauträger)</span>
-              </td>
-              <td className="px-6 py-4 text-right font-semibold text-green-600 dark:text-green-400">
-                {eigenleistungGesamt > 0 ? `− ${formatEuro(eigenleistungGesamt)}` : <span className="text-gray-400 text-xs">Keine markiert</span>}
-              </td>
-            </tr>
-            {eigenleistungGewerke.map(g => (
-              <tr key={g.gewerk}>
-                <td className="px-6 py-2 pl-10 text-gray-600 dark:text-gray-300">
-                  <span className="text-xs text-gray-400 mr-2 font-mono">{g.gewerk_nr}</span>
-                  {g.gewerk}
-                </td>
-                <td className="px-6 py-2 text-right text-green-600 dark:text-green-400">
-                  − {formatEuro(g.eigenleistung_summe)}
-                </td>
-              </tr>
-            ))}
 
             {/* Trennlinie */}
             <tr><td colSpan={2} className="px-6 py-2 bg-gray-50 dark:bg-gray-700/50 text-xs font-semibold text-gray-400 uppercase tracking-wide">Weitere Kosten</td></tr>
