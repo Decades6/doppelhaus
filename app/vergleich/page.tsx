@@ -142,8 +142,9 @@ export default function VergleichPage() {
   });
 
   const pflichtig           = (z: VergleichZeile) => !z.eventual && !z.alternativ;
-  const neuGesamtNettoCalc  = zeilen.filter(pflichtig).reduce((sum, z) => sum + (z.gesamtpreis_neu ?? 0), 0);
-  const altGesamtNettoCalc  = zeilen.filter(pflichtig).reduce((sum, z) => sum + (z.gesamtpreis_alt ?? 0), 0);
+  const pflichtigeZeilen    = zeilen.filter(pflichtig);
+  const neuGesamtNettoCalc  = pflichtigeZeilen.reduce((sum, z) => sum + (z.gesamtpreis_neu ?? 0), 0);
+  const altGesamtNettoCalc  = pflichtigeZeilen.reduce((sum, z) => sum + (z.gesamtpreis_alt ?? 0), 0);
   const neuGesamtNetto      = neuVersion?.nettosumme ?? neuGesamtNettoCalc;
   const altGesamtNetto      = basisVersion?.nettosumme ?? altGesamtNettoCalc;
   const gesamtDifferenz     = neuGesamtNetto - altGesamtNetto;

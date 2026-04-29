@@ -68,7 +68,6 @@ export default function KostenPage() {
   const [grundstueckspreisEingabe, setGrundstueckspreisEingabe] = useState('');
   const speicherTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-
   useEffect(() => { ladeDaten(); }, []);
 
   async function ladeDaten() {
@@ -214,7 +213,7 @@ export default function KostenPage() {
                   Brutto Bauträger-Anteil inkl. 19% MwSt. — {version?.name}
                 </td>
                 <td className="px-6 py-2 text-right text-xs text-gray-400 dark:text-gray-500">
-                  Netto: {formatEuro(version!.nettosumme! - eigenleistungGesamt)}
+                  Netto: {formatEuro((version?.nettosumme ?? 0) - eigenleistungGesamt)}
                 </td>
               </tr>
             )}
