@@ -13,6 +13,7 @@ export default function UploadPage() {
   const [fehler, setFehler] = useState('');
   const [positionen, setPositionen] = useState<ParsedPosition[]>([]);
   const [dateiname, setDateiname] = useState('');
+  const [uebertrageneEigenleistungen, setUebertrageneEigenleistungen] = useState(0);
 
   async function handleDateiWahl(file: File) {
     if (!file || file.type !== 'application/pdf') {
@@ -100,8 +101,27 @@ export default function UploadPage() {
     setLaden(true);
     setFehler('');
 
-    // Neue Version anlegen
     const { data: { user } } = await supabase.auth.getUser();
+
+    // Eigenleistungs-Markierungen der letzten Version laden
+    const eigenleistungNummern = new Set<string>();
+    const { data: letzteVersionen } = await supabase
+      .from('versionen')
+      .select('id')
+      .order('erstellt_am', { ascending: false })
+      .limit(1);
+    if (letzteVersionen && letzteVersionen.length > 0) {
+      const { data: altPos } = await supabase
+        .from('positionen')
+        .select('position_nr')
+        .eq('version_id', letzteVersionen[0].id)
+        .eq('eigenleistung', true);
+      if (altPos) {
+        altPos.forEach(p => { if (p.position_nr) eigenleistungNummern.add(p.position_nr); });
+      }
+    }
+
+    // Neue Version anlegen
     const versionName = name || dateiname || `Angebot ${new Date().toLocaleDateString('de-DE')}`;
     const { data: version, error: versionFehler } = await supabase
       .from('versionen')
@@ -125,7 +145,7 @@ export default function UploadPage() {
         einheit: p.einheit || null,
         einzelpreis: p.einzelpreis || null,
         gesamtpreis: p.gesamtpreis,
-        eigenleistung: false,
+        eigenleistung: !!(p.position_nr && eigenleistungNummern.has(p.position_nr)),
         eventual: p.eventual ?? false,
         alternativ: p.alternativ ?? false,
       }))
@@ -138,8 +158,10 @@ export default function UploadPage() {
       return;
     }
 
+    const anzahlUebertragen = gueltige.filter(p => p.position_nr && eigenleistungNummern.has(p.position_nr)).length;
+    setUebertrageneEigenleistungen(anzahlUebertragen);
     setSchritt('speichern');
-    setTimeout(() => { window.location.href = '/'; }, 1500);
+    setTimeout(() => { window.location.href = '/'; }, 2500);
   }
 
   async function speichern() {
@@ -203,11 +225,16 @@ export default function UploadPage() {
     return (
       <div className="max-w-2xl mx-auto text-center py-16">
         <div className="text-6xl mb-4">✅</div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Erfolgreich gespeichert!</h2>
-        <p className="text-gray-500 mb-4">Du wirst gleich weitergeleitet...</p>
-        <a href="/" className="text-blue-600 hover:underline text-sm">
-          → Jetzt zum Dashboard
-        </a>
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Erfolgreich gespeichert!</h2>
+        {uebertrageneEigenleistungen > 0 ? (
+          <p className="text-green-600 dark:text-green-400 font-medium mb-2">
+            {uebertrageneEigenleistungen} Eigenleistungs-Markierungen wurden übertragen.
+          </p>
+        ) : (
+          <p className="text-gray-500 mb-2">Keine vorherigen Eigenleistungs-Markierungen gefunden.</p>
+        )}
+        <p className="text-gray-400 text-sm mb-4">Du wirst gleich weitergeleitet...</p>
+        <a href="/" className="text-blue-600 hover:underline text-sm">→ Jetzt zum Dashboard</a>
       </div>
     );
   }
