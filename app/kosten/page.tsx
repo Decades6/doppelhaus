@@ -163,6 +163,7 @@ export default function KostenPage() {
   const vorschlagNebenkosten = grundstueckspreis > 0 ? Math.round(grundstueckspreis * 0.055 * 100) / 100 : 0;
   const vorschlagNotar = grundstueckspreis > 0 ? Math.round((grundstueckspreis + brutto) * 0.015 * 100) / 100 : 0;
   const materialGesamt = materialGewerke.reduce((s, g) => s + g.material_summe, 0);
+  const anschluesseGesamt = kosten.stromanschluss + kosten.wasseranschluss + kosten.sielanschluss + kosten.telekomanschluss;
   const manuelleGesamt = Object.values(kosten).reduce((s, v) => s + v, 0);
   const gesamtFinanzierung = brutto + materialGesamt + manuelleGesamt;
 
@@ -299,11 +300,19 @@ export default function KostenPage() {
             ))}
 
             {/* Anschlüsse */}
-            <tr><td colSpan={2} className="px-6 py-2 pl-10 bg-gray-50/50 dark:bg-gray-700/30 text-xs text-gray-400 uppercase tracking-wide">Anschlüsse</td></tr>
+            <tr>
+              <td className="px-6 py-3 text-gray-700 dark:text-gray-200">
+                Anschlüsse
+                <span className="ml-2 text-xs text-gray-400">(Strom, Wasser, Siel, Telekom)</span>
+              </td>
+              <td className="px-6 py-3 text-right text-gray-500 dark:text-gray-400 text-sm">
+                {anschluesseGesamt > 0 ? formatEuro(anschluesseGesamt) : <span className="text-gray-300 dark:text-gray-600">—</span>}
+              </td>
+            </tr>
             {(['stromanschluss', 'wasseranschluss', 'sielanschluss', 'telekomanschluss'] as (keyof ManuelleKosten)[]).map(key => (
               <tr key={key}>
-                <td className="px-6 py-3 pl-10 text-gray-700 dark:text-gray-200">{BEZEICHNUNGEN[key]}</td>
-                <td className="px-6 py-3 text-right">
+                <td className="px-6 py-2 pl-10 text-gray-500 dark:text-gray-400">{BEZEICHNUNGEN[key]}</td>
+                <td className="px-6 py-2 text-right">
                   <KostenInput
                     wert={eingaben[key] ?? ''}
                     onChange={v => feldGeaendert(key, v)}
