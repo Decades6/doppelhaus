@@ -23,6 +23,7 @@ export default function EigenleistungenPage() {
   const [formulare, setFormulare] = useState<Record<string, NeuesFormular>>({});
   const [speichernLaden, setSpeichernLaden] = useState<string | null>(null);
   const [laden, setLaden] = useState(true);
+  const [loeschenLaden, setLoeschenLaden] = useState<string | null>(null);
 
   useEffect(() => { ladeDaten(); }, []);
 
@@ -98,6 +99,13 @@ export default function EigenleistungenPage() {
   async function materialLoeschen(id: string) {
     await supabase.from('eigenleistung_materialien').delete().eq('id', id);
     setMaterialien(prev => prev.filter(m => m.id !== id));
+  }
+
+  async function positionEntfernen(id: string) {
+    setLoeschenLaden(id);
+    await supabase.from('positionen').delete().eq('id', id);
+    setPositionen(prev => prev.filter(p => p.id !== id));
+    setLoeschenLaden(null);
   }
 
   const gewerke = [...new Set(positionen.map(p => p.gewerk))].sort((a, b) => {
@@ -200,13 +208,32 @@ export default function EigenleistungenPage() {
                       <table className="w-full text-sm">
                         <tbody className="divide-y divide-gray-100 dark:divide-gray-600">
                           {gwPos.map(p => (
-                            <tr key={p.id}>
+                            <tr key={p.id} className={p.nicht_im_angebot ? 'bg-orange-50 dark:bg-orange-900/20' : ''}>
                               <td className="px-4 py-2 text-xs text-gray-400 w-16">{p.position_nr || '–'}</td>
-                              <td className="px-4 py-2 text-gray-700 dark:text-gray-200">{p.beschreibung}</td>
+                              <td className="px-4 py-2 text-gray-700 dark:text-gray-200">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  {p.nicht_im_angebot && (
+                                    <span className="text-xs px-1.5 py-0.5 rounded bg-orange-100 dark:bg-orange-900/50 text-orange-700 dark:text-orange-400 font-medium shrink-0">
+                                      Nicht mehr im Angebot
+                                    </span>
+                                  )}
+                                  <span className={p.nicht_im_angebot ? 'text-gray-400 dark:text-gray-500' : ''}>{p.beschreibung}</span>
+                                </div>
+                              </td>
                               <td className="px-4 py-2 text-right text-gray-500 dark:text-gray-400 whitespace-nowrap w-32">
                                 {p.menge != null ? `${p.menge} ${p.einheit || ''}`.trim() : ''}
                               </td>
                               <td className="px-4 py-2 text-right font-medium text-gray-800 dark:text-white whitespace-nowrap w-28">{formatEuro(p.gesamtpreis)}</td>
+                              <td className="px-4 py-2 text-center w-10">
+                                {p.nicht_im_angebot && (
+                                  <button
+                                    onClick={() => positionEntfernen(p.id)}
+                                    disabled={loeschenLaden === p.id}
+                                    className="text-gray-300 hover:text-red-400 transition-colors text-lg leading-none disabled:opacity-50"
+                                    title="Position entfernen"
+                                  >×</button>
+                                )}
+                              </td>
                             </tr>
                           ))}
                         </tbody>

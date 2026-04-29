@@ -19,6 +19,7 @@ export interface Position {
   eventual: boolean;
   alternativ: boolean;
   optional_aktiv: boolean;
+  nicht_im_angebot: boolean;
   created_at: string;
 }
 

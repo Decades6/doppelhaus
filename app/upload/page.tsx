@@ -105,6 +105,7 @@ export default function UploadPage() {
 
     // Eigenleistungs-Markierungen der letzten Version laden
     const eigenleistungNummern = new Set<string>();
+    let altEigenleistungPos: { position_nr: string | null; gewerk: string; beschreibung: string; menge: number | null; einheit: string | null; einzelpreis: number | null; gesamtpreis: number }[] = [];
     const { data: letzteVersionen } = await supabase
       .from('versionen')
       .select('id')
@@ -113,10 +114,11 @@ export default function UploadPage() {
     if (letzteVersionen && letzteVersionen.length > 0) {
       const { data: altPos } = await supabase
         .from('positionen')
-        .select('position_nr')
+        .select('position_nr, gewerk, beschreibung, menge, einheit, einzelpreis, gesamtpreis')
         .eq('version_id', letzteVersionen[0].id)
         .eq('eigenleistung', true);
       if (altPos) {
+        altEigenleistungPos = altPos;
         altPos.forEach(p => { if (p.position_nr) eigenleistungNummern.add(p.position_nr); });
       }
     }
@@ -135,8 +137,12 @@ export default function UploadPage() {
       return;
     }
 
-    const { error } = await supabase.from('positionen').insert(
-      gueltige.map(p => ({
+    // Verwaiste Eigenleistungen: waren markiert, fehlen im neuen PDF
+    const neueNummern = new Set(gueltige.map(p => p.position_nr).filter(Boolean) as string[]);
+    const verwaist = altEigenleistungPos.filter(p => p.position_nr && !neueNummern.has(p.position_nr));
+
+    const { error } = await supabase.from('positionen').insert([
+      ...gueltige.map(p => ({
         version_id: version.id,
         position_nr: p.position_nr || null,
         gewerk: p.gewerk || 'Allgemein',
@@ -148,8 +154,23 @@ export default function UploadPage() {
         eigenleistung: !!(p.position_nr && eigenleistungNummern.has(p.position_nr)),
         eventual: p.eventual ?? false,
         alternativ: p.alternativ ?? false,
-      }))
-    );
+        nicht_im_angebot: false,
+      })),
+      ...verwaist.map(p => ({
+        version_id: version.id,
+        position_nr: p.position_nr,
+        gewerk: p.gewerk,
+        beschreibung: p.beschreibung,
+        menge: p.menge,
+        einheit: p.einheit,
+        einzelpreis: p.einzelpreis,
+        gesamtpreis: p.gesamtpreis,
+        eigenleistung: true,
+        eventual: false,
+        alternativ: false,
+        nicht_im_angebot: true,
+      })),
+    ]);
 
     setLaden(false);
 
@@ -158,7 +179,7 @@ export default function UploadPage() {
       return;
     }
 
-    const anzahlUebertragen = gueltige.filter(p => p.position_nr && eigenleistungNummern.has(p.position_nr)).length;
+    const anzahlUebertragen = gueltige.filter(p => p.position_nr && eigenleistungNummern.has(p.position_nr)).length + verwaist.length;
     setUebertrageneEigenleistungen(anzahlUebertragen);
     setSchritt('speichern');
     setTimeout(() => { window.location.href = '/'; }, 2500);

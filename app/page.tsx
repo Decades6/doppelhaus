@@ -149,7 +149,7 @@ ${zeilen}
   });
 
   const istOptional = (p: Position) => (p.eventual || p.alternativ) && !p.optional_aktiv;
-  const aktivPositionen = positionen.filter(p => !istOptional(p) && !ersetzteIds.has(p.id));
+  const aktivPositionen = positionen.filter(p => !istOptional(p) && !ersetzteIds.has(p.id) && !p.nicht_im_angebot);
   const optionalPositionen = positionen.filter(p => p.eventual || p.alternativ);
   const optionalNichtAktiv = optionalPositionen.filter(p => !p.optional_aktiv);
   const eventualSumme = optionalNichtAktiv.reduce((sum, p) => sum + p.gesamtpreis, 0);
