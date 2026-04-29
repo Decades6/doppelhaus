@@ -51,9 +51,16 @@ interface EigenleistungGewerk {
   eigenleistung_summe: number;
 }
 
+interface MaterialGewerk {
+  gewerk: string;
+  gewerk_nr: string;
+  material_summe: number;
+}
+
 export default function KostenPage() {
   const [version, setVersion] = useState<Version | null>(null);
   const [eigenleistungGewerke, setEigenleistungGewerke] = useState<EigenleistungGewerk[]>([]);
+  const [materialGewerke, setMaterialGewerke] = useState<MaterialGewerk[]>([]);
   const [kosten, setKosten] = useState<ManuelleKosten>(LEER_KOSTEN);
   const [eingaben, setEingaben] = useState<Record<string, string>>({});
   const [laden, setLaden] = useState(true);
@@ -75,12 +82,11 @@ export default function KostenPage() {
       const v = versionen[0] as Version;
       setVersion(v);
 
-      const { data: pos } = await supabase
-        .from('positionen')
-        .select('gewerk, position_nr, gesamtpreis')
-        .eq('version_id', v.id)
-        .eq('eigenleistung', true)
-        .eq('nicht_im_angebot', false);
+      const [{ data: pos }, { data: mat }] = await Promise.all([
+        supabase.from('positionen').select('gewerk, position_nr, gesamtpreis')
+          .eq('version_id', v.id).eq('eigenleistung', true).eq('nicht_im_angebot', false),
+        supabase.from('eigenleistung_materialien').select('gewerk, gesamtpreis'),
+      ]);
 
       if (pos) {
         const gwMap = new Map<string, EigenleistungGewerk>();
@@ -91,10 +97,25 @@ export default function KostenPage() {
           }
           gwMap.get(p.gewerk)!.eigenleistung_summe += p.gesamtpreis;
         }
-        const sorted = [...gwMap.values()].sort((a, b) =>
-          comparePositionNr(a.gewerk_nr || null, b.gewerk_nr || null)
+        setEigenleistungGewerke(
+          [...gwMap.values()].sort((a, b) => comparePositionNr(a.gewerk_nr || null, b.gewerk_nr || null))
         );
-        setEigenleistungGewerke(sorted);
+
+        if (mat) {
+          const matMap = new Map<string, number>();
+          for (const m of mat as { gewerk: string; gesamtpreis: number }[]) {
+            matMap.set(m.gewerk, (matMap.get(m.gewerk) ?? 0) + m.gesamtpreis);
+          }
+          setMaterialGewerke(
+            [...matMap.entries()]
+              .map(([gewerk, material_summe]) => ({
+                gewerk,
+                gewerk_nr: gwMap.get(gewerk)?.gewerk_nr ?? '',
+                material_summe,
+              }))
+              .sort((a, b) => comparePositionNr(a.gewerk_nr || null, b.gewerk_nr || null))
+          );
+        }
       }
     }
 
@@ -141,8 +162,9 @@ export default function KostenPage() {
   const grundstueckspreis = parseEingabe(grundstueckspreisEingabe);
   const vorschlagNebenkosten = grundstueckspreis > 0 ? Math.round(grundstueckspreis * 0.055 * 100) / 100 : 0;
   const vorschlagNotar = grundstueckspreis > 0 ? Math.round((grundstueckspreis + brutto) * 0.015 * 100) / 100 : 0;
+  const materialGesamt = materialGewerke.reduce((s, g) => s + g.material_summe, 0);
   const manuelleGesamt = Object.values(kosten).reduce((s, v) => s + v, 0);
-  const gesamtFinanzierung = brutto + manuelleGesamt;
+  const gesamtFinanzierung = brutto + materialGesamt + manuelleGesamt;
 
   if (laden) return <div className="text-center py-16 text-gray-500">Lade Daten...</div>;
 
@@ -195,6 +217,32 @@ export default function KostenPage() {
                   {eigenleistungGesamt > 0 && <span className="ml-2 text-green-600 dark:text-green-500">(Eigenleistung: −{formatEuro(eigenleistungGesamt)})</span>}
                 </td>
               </tr>
+            )}
+
+            {/* Eigenleistungen Materialkosten */}
+            {materialGewerke.length > 0 && (
+              <>
+                <tr className="bg-orange-50/50 dark:bg-orange-900/10">
+                  <td className="px-6 py-4 font-semibold text-gray-800 dark:text-white">
+                    Eigenleistung Materialkosten
+                    <span className="ml-2 text-xs font-normal text-gray-400">(eigene Materialien)</span>
+                  </td>
+                  <td className="px-6 py-4 text-right font-semibold text-orange-600 dark:text-orange-400">
+                    {formatEuro(materialGesamt)}
+                  </td>
+                </tr>
+                {materialGewerke.map(g => (
+                  <tr key={g.gewerk}>
+                    <td className="px-6 py-2 pl-10 text-gray-600 dark:text-gray-300">
+                      <span className="text-xs text-gray-400 mr-2 font-mono">{g.gewerk_nr}</span>
+                      {g.gewerk}
+                    </td>
+                    <td className="px-6 py-2 text-right text-orange-600 dark:text-orange-400">
+                      {formatEuro(g.material_summe)}
+                    </td>
+                  </tr>
+                ))}
+              </>
             )}
 
             {/* Trennlinie */}
@@ -282,7 +330,7 @@ export default function KostenPage() {
             <tr className="bg-gray-900 dark:bg-gray-950 print:bg-gray-100">
               <td className="px-6 py-5 font-bold text-white dark:text-white print:text-gray-900 text-base">
                 Gesamtfinanzierungsbedarf
-                <div className="text-xs font-normal text-gray-400 mt-0.5">Hauskosten − Eigenleistung + Weitere Kosten</div>
+                <div className="text-xs font-normal text-gray-400 mt-0.5">Hauskosten + Materialkosten + Weitere Kosten</div>
               </td>
               <td className="px-6 py-5 text-right font-bold text-white dark:text-white print:text-gray-900 text-xl">
                 {formatEuro(gesamtFinanzierung)}
