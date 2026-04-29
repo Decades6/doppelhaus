@@ -58,7 +58,9 @@ export default function KostenPage() {
   const [eingaben, setEingaben] = useState<Record<string, string>>({});
   const [laden, setLaden] = useState(true);
   const [speichern, setSpeichern] = useState(false);
+  const [grundstueckspreisEingabe, setGrundstueckspreisEingabe] = useState('');
   const speicherTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
 
   useEffect(() => { ladeDaten(); }, []);
 
@@ -134,6 +136,9 @@ export default function KostenPage() {
   }
 
   const brutto = version?.nettosumme ? version.nettosumme * 1.19 : 0;
+  const grundstueckspreis = parseEingabe(grundstueckspreisEingabe);
+  const vorschlagNebenkosten = grundstueckspreis > 0 ? Math.round(grundstueckspreis * 0.055 * 100) / 100 : 0;
+  const vorschlagNotar = grundstueckspreis > 0 ? Math.round((grundstueckspreis + brutto) * 0.015 * 100) / 100 : 0;
   const eigenleistungGesamt = eigenleistungGewerke.reduce((s, g) => s + g.eigenleistung_summe, 0);
   const manuelleGesamt = Object.values(kosten).reduce((s, v) => s + v, 0);
   const gesamtFinanzierung = brutto - eigenleistungGesamt + manuelleGesamt;
@@ -214,6 +219,44 @@ export default function KostenPage() {
 
             {/* Trennlinie */}
             <tr><td colSpan={2} className="px-6 py-2 bg-gray-50 dark:bg-gray-700/50 text-xs font-semibold text-gray-400 uppercase tracking-wide">Weitere Kosten</td></tr>
+
+            {/* Pauschale-Hilfe */}
+            <tr className="print:hidden bg-amber-50/50 dark:bg-amber-900/10">
+              <td colSpan={2} className="px-6 py-3">
+                <div className="flex items-center gap-4 flex-wrap">
+                  <span className="text-xs text-amber-700 dark:text-amber-400 font-medium">Pauschale berechnen (Hamburg):</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-gray-500 dark:text-gray-400">Grundstückspreis</span>
+                    <input
+                      type="text"
+                      value={grundstueckspreisEingabe}
+                      onChange={e => setGrundstueckspreisEingabe(e.target.value)}
+                      placeholder="z.B. 300.000"
+                      className="w-36 text-right text-sm border border-amber-200 dark:border-amber-700 rounded-lg px-3 py-1 focus:outline-none focus:border-amber-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100"
+                    />
+                    <span className="text-xs text-gray-400">€</span>
+                  </div>
+                  {grundstueckspreis > 0 && (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        onClick={() => feldGeaendert('nebenkosten', formatEingabe(vorschlagNebenkosten))}
+                        className="text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 px-3 py-1 rounded-full hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors"
+                        title="Grunderwerbsteuer Hamburg: 5,5 % vom Grundstückspreis"
+                      >
+                        Nebenkosten {formatEuro(vorschlagNebenkosten)} übernehmen
+                      </button>
+                      <button
+                        onClick={() => feldGeaendert('notar', formatEingabe(vorschlagNotar))}
+                        className="text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 px-3 py-1 rounded-full hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors"
+                        title="Notar + Grundbuch: 1,5 % von Grundstück + Baukosten"
+                      >
+                        Notar {formatEuro(vorschlagNotar)} übernehmen
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </td>
+            </tr>
 
             {/* Einfache manuelle Felder */}
             {(['nebenkosten', 'notar', 'vermessung'] as (keyof ManuelleKosten)[]).map(key => (
