@@ -22,6 +22,18 @@ export interface Position {
   created_at: string;
 }
 
+export interface EigenleistungMaterial {
+  id: string;
+  user_id: string;
+  gewerk: string;
+  bezeichnung: string;
+  menge: number | null;
+  einheit: string | null;
+  einzelpreis: number | null;
+  gesamtpreis: number;
+  created_at: string;
+}
+
 export interface ParsedPosition {
   position_nr?: string;
   gewerk: string;
