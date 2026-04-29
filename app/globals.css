@@ -24,3 +24,16 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+@media print {
+  header, nav { display: none !important; }
+  body { background: white !important; color: black !important; }
+  .print\:hidden { display: none !important; }
+  .print\:block { display: block !important; }
+  .print\:shadow-none { box-shadow: none !important; }
+  .print\:border { border: 1px solid #e5e7eb !important; }
+  .print\:bg-gray-100 { background-color: #f3f4f6 !important; }
+  .print\:text-gray-900 { color: #111827 !important; }
+  .print\:border-0 { border: none !important; }
+  .print\:bg-transparent { background: transparent !important; }
+}
