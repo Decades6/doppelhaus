@@ -15,7 +15,9 @@ interface UebersichtDaten {
   anzahlEigenleistung: number;
 }
 
-export default function UebersichtTab({ onTabWechsel }: { onTabWechsel: (tab: string) => void }) {
+type TabId = 'uebersicht' | 'angebot' | 'eigenleistungen' | 'kosten' | 'zahlungen';
+
+export default function UebersichtTab({ onTabWechsel }: { onTabWechsel: (tab: TabId) => void }) {
   const [daten, setDaten] = useState<UebersichtDaten | null>(null);
   const [laden, setLaden] = useState(true);
 
