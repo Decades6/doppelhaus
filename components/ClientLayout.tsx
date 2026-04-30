@@ -61,24 +61,6 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
           </Link>
           <div className="flex items-center gap-3">
             <Link
-              href="/kosten"
-              className="text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-gray-400 transition-colors"
-            >
-              Kostenübersicht
-            </Link>
-            <Link
-              href="/eigenleistungen"
-              className="text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-gray-400 transition-colors"
-            >
-              Eigenleistungen
-            </Link>
-            <Link
-              href="/vergleich"
-              className="text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-gray-400 transition-colors"
-            >
-              Vergleich
-            </Link>
-            <Link
               href="/upload"
               className="text-sm bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
             >

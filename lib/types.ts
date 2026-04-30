@@ -35,6 +35,16 @@ export interface EigenleistungMaterial {
   created_at: string;
 }
 
+export interface Zahlung {
+  id: string;
+  user_id: string;
+  datum: string;
+  betrag: number;
+  beschreibung: string;
+  kategorie: string | null;
+  created_at: string;
+}
+
 export interface ParsedPosition {
   position_nr?: string;
   gewerk: string;
