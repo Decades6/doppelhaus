@@ -245,6 +245,51 @@ export default function ZahlungenTab() {
           {/* Aufschlüsselung nach Kategorie */}
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5">
             <h3 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-4">Nach Kategorie</h3>
+
+            {/* Kostenverteilung – gestapelter Proportionalbalken */}
+            {(() => {
+              const totalGeplant = Object.values(planungSummen).reduce((s, v) => s + v, 0);
+              if (totalGeplant === 0) return null;
+              const FARBEN: Record<string, string> = {
+                'Notar/Grundbuch': 'bg-purple-500',
+                'Anschlüsse':      'bg-cyan-500',
+                'Erdarbeiten':     'bg-orange-500',
+                'Küche':           'bg-pink-500',
+                'Material':        'bg-yellow-500',
+                'Eigenleistung':   'bg-green-500',
+                'Sonstiges':       'bg-gray-400',
+              };
+              const segmente = KATEGORIEN
+                .filter(k => (planungSummen[k] ?? 0) > 0)
+                .map(k => ({ kat: k, betrag: planungSummen[k], prozent: (planungSummen[k] / totalGeplant) * 100 }));
+              return (
+                <div className="mb-5">
+                  <div className="text-xs text-gray-400 dark:text-gray-500 mb-2">
+                    Kostenverteilung gesamt <span className="font-medium text-gray-600 dark:text-gray-300">{formatEuro(totalGeplant)}</span>
+                  </div>
+                  <div className="flex h-4 rounded-lg overflow-hidden mb-3 gap-px">
+                    {segmente.map(s => (
+                      <div
+                        key={s.kat}
+                        className={`${FARBEN[s.kat] ?? 'bg-blue-500'} h-full transition-all`}
+                        style={{ width: `${s.prozent}%` }}
+                        title={`${s.kat}: ${formatEuro(s.betrag)} (${Math.round(s.prozent)}%)`}
+                      />
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap gap-x-3 gap-y-1.5">
+                    {segmente.map(s => (
+                      <div key={s.kat} className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+                        <div className={`w-2.5 h-2.5 rounded-sm ${FARBEN[s.kat] ?? 'bg-blue-500'} shrink-0`} />
+                        <span>{s.kat}</span>
+                        <span className="font-medium text-gray-600 dark:text-gray-300">{Math.round(s.prozent)}%</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="border-t border-gray-100 dark:border-gray-700 mt-4 mb-1" />
+                </div>
+              );
+            })()}
             <div className="space-y-3">
               {nachKategorie.map(k => {
                 const geplant = planungSummen[k.kategorie] ?? 0;
