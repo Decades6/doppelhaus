@@ -174,6 +174,30 @@ export default function AngebotTab() {
       return u;
     }));
 
+    // Einheit-Korrekturen für Parser-Lernfunktion speichern
+    const einheitKorrekturen = eintraege
+      .filter(([id, felder]) => 'einheit' in felder)
+      .map(([id, felder]) => {
+        const pos = positionen.find(p => p.id === id);
+        if (!pos || !felder.einheit?.trim()) return null;
+        return {
+          beschreibung_prefix: pos.beschreibung.substring(0, 50),
+          einheit: felder.einheit.trim(),
+          updated_at: new Date().toISOString(),
+        };
+      })
+      .filter(Boolean);
+
+    if (einheitKorrekturen.length > 0) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await supabase.from('parser_korrekturen').upsert(
+          einheitKorrekturen.map(k => ({ ...k, user_id: user.id })),
+          { onConflict: 'user_id,beschreibung_prefix' }
+        );
+      }
+    }
+
     setBearbeitungen({});
     setSpeichertEdit(false);
     setEditModus(false);

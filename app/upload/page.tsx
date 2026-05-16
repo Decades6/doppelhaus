@@ -55,7 +55,22 @@ export default function UploadPage() {
         return;
       }
 
-      await speichernMitDaten(json.positionen as ParsedPosition[], file.name, typeof json.nettosumme === 'number' ? json.nettosumme : null);
+      // Parser-Korrekturen laden und anwenden
+      let geparste = json.positionen as ParsedPosition[];
+      const { data: korrekturen } = await supabase
+        .from('parser_korrekturen')
+        .select('beschreibung_prefix, einheit');
+      if (korrekturen && korrekturen.length > 0) {
+        geparste = geparste.map(p => {
+          const korr = korrekturen.find(k =>
+            p.beschreibung.substring(0, 50) === k.beschreibung_prefix ||
+            p.beschreibung.startsWith(k.beschreibung_prefix)
+          );
+          return korr ? { ...p, einheit: korr.einheit } : p;
+        });
+      }
+
+      await speichernMitDaten(geparste, file.name, typeof json.nettosumme === 'number' ? json.nettosumme : null);
     } catch (e) {
       setFehler('Unerwarteter Fehler: ' + String(e));
       setLaden(false);
