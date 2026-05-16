@@ -105,6 +105,7 @@ export default function UploadPage() {
 
     // Eigenleistungs-Markierungen der letzten Version laden
     const eigenleistungNummern = new Set<string>();
+    const eigenleistungGewerke = new Set<string>();
     let altEigenleistungPos: { position_nr: string | null; gewerk: string; beschreibung: string; menge: number | null; einheit: string | null; einzelpreis: number | null; gesamtpreis: number }[] = [];
     const { data: letzteVersionen } = await supabase
       .from('versionen')
@@ -119,7 +120,10 @@ export default function UploadPage() {
         .eq('eigenleistung', true);
       if (altPos) {
         altEigenleistungPos = altPos;
-        altPos.forEach(p => { if (p.position_nr) eigenleistungNummern.add(p.position_nr); });
+        altPos.forEach(p => {
+          if (p.position_nr) eigenleistungNummern.add(p.position_nr);
+          eigenleistungGewerke.add(p.gewerk);
+        });
       }
     }
 
@@ -151,7 +155,10 @@ export default function UploadPage() {
         einheit: p.einheit || null,
         einzelpreis: p.einzelpreis || null,
         gesamtpreis: p.gesamtpreis,
-        eigenleistung: !!(p.position_nr && eigenleistungNummern.has(p.position_nr)),
+        eigenleistung: !!(
+          (p.position_nr && eigenleistungNummern.has(p.position_nr)) ||
+          eigenleistungGewerke.has(p.gewerk || 'Allgemein')
+        ),
         eventual: p.eventual ?? false,
         alternativ: p.alternativ ?? false,
         nicht_im_angebot: false,
