@@ -93,6 +93,12 @@ export default function ZahlungenTab() {
 
   const gesamtBezahlt = zahlungen.reduce((s, z) => s + z.betrag, 0);
 
+  const planungSummen = kostenVorlagen.reduce((acc, v) => {
+    const kat = KOSTEN_ZU_ZAHLUNG[v.kategorie] ?? 'Sonstiges';
+    acc[kat] = (acc[kat] ?? 0) + v.betrag;
+    return acc;
+  }, {} as Record<string, number>);
+
   const nachKategorie = KATEGORIEN.map(k => ({
     kategorie: k,
     summe: zahlungen.filter(z => z.kategorie === k).reduce((s, z) => s + z.betrag, 0),
@@ -225,17 +231,34 @@ export default function ZahlungenTab() {
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5">
             <h3 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-4">Nach Kategorie</h3>
             <div className="space-y-3">
-              {nachKategorie.map(k => (
-                <div key={k.kategorie}>
-                  <div className="flex justify-between text-sm mb-1">
-                    <span className="text-gray-600 dark:text-gray-300">{k.kategorie}</span>
-                    <span className="font-medium text-gray-800 dark:text-white">{formatEuro(k.summe)}</span>
+              {nachKategorie.map(k => {
+                const geplant = planungSummen[k.kategorie] ?? 0;
+                const offen = geplant > 0 ? Math.max(geplant - k.summe, 0) : 0;
+                const prozentBezahlt = geplant > 0 ? Math.min((k.summe / geplant) * 100, 100) : 0;
+                const prozentOffen = geplant > 0 ? Math.round(100 - prozentBezahlt) : null;
+                return (
+                  <div key={k.kategorie}>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span className="text-gray-600 dark:text-gray-300">{k.kategorie}</span>
+                      <span className="font-medium text-gray-800 dark:text-white">{formatEuro(k.summe)}</span>
+                    </div>
+                    <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-1.5 mb-1">
+                      <div
+                        className="bg-blue-500 h-1.5 rounded-full"
+                        style={{ width: geplant > 0 ? `${prozentBezahlt}%` : `${(k.summe / gesamtBezahlt) * 100}%` }}
+                      />
+                    </div>
+                    {prozentOffen !== null && (
+                      <div className="text-xs">
+                        {offen > 0
+                          ? <span className="text-orange-400">{prozentOffen}% offen – {formatEuro(offen)}</span>
+                          : <span className="text-green-500">vollständig bezahlt</span>
+                        }
+                      </div>
+                    )}
                   </div>
-                  <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-1.5">
-                    <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: `${(k.summe / gesamtBezahlt) * 100}%` }} />
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
