@@ -81,6 +81,17 @@ export default function AngebotTab() {
     setPositionen(prev => prev.map(p => (p.id === id ? { ...p, eigenleistung: !current } : p)));
   }
 
+  async function toggleGewerkEigenleistung(gewerk: string, alleMarkiert: boolean, e: React.MouseEvent) {
+    e.stopPropagation();
+    const ids = positionen
+      .filter(p => p.gewerk === gewerk && !p.eventual && !p.alternativ && !p.nicht_im_angebot)
+      .map(p => p.id);
+    if (ids.length === 0) return;
+    const neuerWert = !alleMarkiert;
+    await supabase.from('positionen').update({ eigenleistung: neuerWert }).in('id', ids);
+    setPositionen(prev => prev.map(p => ids.includes(p.id) ? { ...p, eigenleistung: neuerWert } : p));
+  }
+
   function exportGewerkeXml() {
     const sorted = [...new Set(positionen.map(p => p.gewerk))].sort((a, b) => {
       const aNr = positionen.find(p => p.gewerk === a && p.position_nr)?.position_nr ?? null;
@@ -238,7 +249,7 @@ ${zeilen}
       </div>
 
       <div className="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-lg px-4 py-3 mb-4 text-sm text-blue-700 dark:text-blue-300">
-        Klicke auf das Kreis-Symbol rechts bei einer Position um sie als <strong>Eigenleistung</strong> zu markieren.
+        Kreis-Symbol bei einer Position: einzelne <strong>Eigenleistung</strong> markieren. Kreis-Symbol im Gewerk-Header: gesamtes Gewerk markieren/aufheben.
       </div>
 
       {optionalPositionen.length > 0 && (
@@ -263,6 +274,10 @@ ${zeilen}
           const isOffen = offeneGewerke.has(gewerk);
           const gwNummerParts = gwPositionen.find(p => p.position_nr)?.position_nr?.split('.');
           const gwNummer = gwNummerParts ? gwNummerParts.slice(0, 2).join('.') : undefined;
+          const relevantePositionen = gwPositionen.filter(p => !p.eventual && !p.alternativ && !p.nicht_im_angebot);
+          const eigenleistungCount = relevantePositionen.filter(p => p.eigenleistung).length;
+          const alleEigenleistung = relevantePositionen.length > 0 && eigenleistungCount === relevantePositionen.length;
+          const einigeEigenleistung = eigenleistungCount > 0 && !alleEigenleistung;
 
           return (
             <div key={gewerk} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden">
@@ -281,10 +296,23 @@ ${zeilen}
                   </span>
                 </div>
                 <div className="flex items-center gap-4 text-sm">
+                  {relevantePositionen.length > 0 && (
+                    <button
+                      onClick={(e) => toggleGewerkEigenleistung(gewerk, alleEigenleistung, e)}
+                      title={alleEigenleistung ? 'Eigenleistung für Gewerk aufheben' : 'Gesamtes Gewerk als Eigenleistung markieren'}
+                      className={`w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all text-xs font-bold shrink-0 ${
+                        alleEigenleistung
+                          ? 'bg-green-500 border-green-500 text-white'
+                          : einigeEigenleistung
+                          ? 'bg-green-100 border-green-400 text-green-600 dark:bg-green-900/30 dark:border-green-500 dark:text-green-400'
+                          : 'border-gray-300 dark:border-gray-500 text-transparent hover:border-green-400 hover:text-green-400'
+                      }`}
+                    >✓</button>
+                  )}
                   {gwEigenleistung > 0 && (
                     <span className="text-green-600 font-medium">-{formatEuro(gwEigenleistung)}</span>
                   )}
-                  <span className="text-gray-700 font-semibold">{formatEuro(gwSumme)}</span>
+                  <span className="text-gray-700 dark:text-gray-200 font-semibold">{formatEuro(gwSumme)}</span>
                 </div>
               </button>
 
