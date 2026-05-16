@@ -16,7 +16,7 @@ const GEWERK_RX   = /^(\d+\.\d+\.)([A-ZÄÖÜa-zäöüß].{3,})/;
 const SKIP_RX     = /^(Summe \d|Zwischensumme|Nettosumme|Bruttosumme|zzgl\.|MwSt)/i;
 const CLOSING_RX  = /^(Summe |Zwischensumme )/i;
 
-const EINHEIT_LIST = 'm²|m2|m³|m3|lfdm|lfm|mxWo\\.?|Woch\\.?|Wo\\.?|Stk\\.?|St\\.?|Psch\\.?|psch\\.?|kg|VE|Pkg\\.?|Std\\.?|qm|m';
+const EINHEIT_LIST = 'm²xWo\\.?|m2xWo\\.?|m³xWo\\.?|m3xWo\\.?|mxWo\\.?|m²|m2|m³|m3|lfdm|lfm|Woch\\.?|Wo\\.?|Stk\\.?|St\\.?|Psch\\.?|psch\\.?|kg|VE|Pkg\\.?|Std\\.?|qm|m';
 const EINHEIT_RX   = new RegExp(`(\\d+(?:[,.]\\d+)?)\\s*(${EINHEIT_LIST})(?=\\s|[A-ZÄÖÜ]|$)`, 'i');
 
 // Zeichen/Wörter die anzeigen dass ein Titel auf der nächsten Zeile weitergeht
