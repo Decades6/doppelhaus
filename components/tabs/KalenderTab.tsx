@@ -65,10 +65,10 @@ export default function KalenderTab() {
       .from('kalender_tokens')
       .select('token')
       .eq('user_id', user.id)
-      .single();
+      .limit(1);
 
-    if (existing?.token) {
-      setIcsToken(existing.token);
+    if (existing && existing.length > 0) {
+      setIcsToken(existing[0].token);
     } else {
       const { data: neu } = await supabase
         .from('kalender_tokens')

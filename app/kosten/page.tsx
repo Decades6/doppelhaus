@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Position, Version } from '@/lib/types';
-import { formatEuro, comparePositionNr } from '@/lib/utils';
+import { formatEuro, comparePositionNr, parseGermanNumber, formatGermanNumber } from '@/lib/utils';
 import Link from 'next/link';
 
 interface ManuelleKosten {
@@ -36,14 +36,6 @@ const BEZEICHNUNGEN: Record<keyof ManuelleKosten, string> = {
   kueche:           'Küche',
 };
 
-function parseEingabe(wert: string): number {
-  return parseFloat(wert.replace(/\./g, '').replace(',', '.')) || 0;
-}
-
-function formatEingabe(wert: number): string {
-  if (wert === 0) return '';
-  return wert.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
 
 interface EigenleistungGewerk {
   gewerk: string;
@@ -128,7 +120,7 @@ export default function KostenPage() {
       for (const row of manuelleRows) {
         if (row.schluessel in LEER_KOSTEN) {
           (geladen as Record<string, number>)[row.schluessel] = row.betrag ?? 0;
-          eingangsWerte[row.schluessel] = row.betrag ? formatEingabe(row.betrag) : '';
+          eingangsWerte[row.schluessel] = row.betrag ? formatGermanNumber(row.betrag) : '';
         }
       }
       setKosten({ ...LEER_KOSTEN, ...geladen });
@@ -140,7 +132,7 @@ export default function KostenPage() {
 
   async function feldGeaendert(schluessel: keyof ManuelleKosten, rohwert: string) {
     setEingaben(prev => ({ ...prev, [schluessel]: rohwert }));
-    const betrag = parseEingabe(rohwert);
+    const betrag = parseGermanNumber(rohwert) ?? 0;
     setKosten(prev => ({ ...prev, [schluessel]: betrag }));
 
     if (speicherTimeout.current) clearTimeout(speicherTimeout.current);
@@ -158,7 +150,7 @@ export default function KostenPage() {
   const eigenleistungGesamt = eigenleistungGewerke.reduce((s, g) => s + g.eigenleistung_summe, 0);
   // Bauträger-Anteil: Gesamtnetto minus Eigenleistungen (netto), dann Brutto
   const brutto = version?.nettosumme ? (version.nettosumme - eigenleistungGesamt) * 1.19 : 0;
-  const grundstueckspreis = parseEingabe(grundstueckspreisEingabe);
+  const grundstueckspreis = parseGermanNumber(grundstueckspreisEingabe) ?? 0;
   const vorschlagNebenkosten = grundstueckspreis > 0 ? Math.round(grundstueckspreis * 0.055 * 100) / 100 : 0;
   const vorschlagNotar = grundstueckspreis > 0 ? Math.round((grundstueckspreis + brutto) * 0.015 * 100) / 100 : 0;
   const materialGesamt = materialGewerke.reduce((s, g) => s + g.material_summe, 0);
@@ -266,14 +258,14 @@ export default function KostenPage() {
                   {grundstueckspreis > 0 && (
                     <div className="flex items-center gap-2 flex-wrap">
                       <button
-                        onClick={() => feldGeaendert('nebenkosten', formatEingabe(vorschlagNebenkosten))}
+                        onClick={() => feldGeaendert('nebenkosten', formatGermanNumber(vorschlagNebenkosten))}
                         className="text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 px-3 py-1 rounded-full hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors"
                         title="Grunderwerbsteuer Hamburg: 5,5 % vom Grundstückspreis"
                       >
                         Nebenkosten {formatEuro(vorschlagNebenkosten)} übernehmen
                       </button>
                       <button
-                        onClick={() => feldGeaendert('notar', formatEingabe(vorschlagNotar))}
+                        onClick={() => feldGeaendert('notar', formatGermanNumber(vorschlagNotar))}
                         className="text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 px-3 py-1 rounded-full hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors"
                         title="Notar + Grundbuch: 1,5 % von Grundstück + Baukosten"
                       >

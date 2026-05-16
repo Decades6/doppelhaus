@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Zahlung } from '@/lib/types';
-import { formatEuro } from '@/lib/utils';
+import { formatEuro, parseGermanNumber, formatGermanNumber } from '@/lib/utils';
 
 const KATEGORIEN = ['Bauträger', 'Notar/Grundbuch', 'Anschlüsse', 'Erdarbeiten', 'Küche', 'Material', 'Eigenleistung', 'Sonstiges'];
 
@@ -68,14 +68,14 @@ export default function ZahlungenTab() {
     setForm(p => ({
       ...p,
       beschreibung: v.bezeichnung,
-      betrag: rest.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      betrag: formatGermanNumber(rest),
       kategorie: KOSTEN_ZU_ZAHLUNG[v.kategorie] ?? 'Sonstiges',
     }));
   }
 
   async function hinzufuegen() {
-    const betrag = parseFloat(form.betrag.replace(/\./g, '').replace(',', '.'));
-    if (!form.beschreibung.trim() || isNaN(betrag) || betrag <= 0) return;
+    const betrag = parseGermanNumber(form.betrag);
+    if (!form.beschreibung.trim() || betrag == null || betrag <= 0) return;
     setSpeichern(true);
     const { data: { user } } = await supabase.auth.getUser();
     const { data, error } = await supabase

@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Position, Version } from '@/lib/types';
-import { formatEuro, formatDatum, comparePositionNr } from '@/lib/utils';
+import { formatEuro, formatDatum, comparePositionNr, parseGermanNumber, formatGermanNumber } from '@/lib/utils';
 import Link from 'next/link';
 import VersionenVerwalten from '@/components/VersionenVerwalten';
 
@@ -26,15 +26,6 @@ function buildPaare(sorted: Position[]): Gruppe[] {
   return result;
 }
 
-function numZuEingabe(wert: number | null | undefined): string {
-  if (wert == null) return '';
-  return wert.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-function eingabeZuNum(wert: string): number | null {
-  if (!wert.trim()) return null;
-  return parseFloat(wert.replace(/\./g, '').replace(',', '.')) || null;
-}
 
 export default function AngebotTab() {
   const [positionen, setPositionen] = useState<Position[]>([]);
@@ -114,9 +105,9 @@ export default function AngebotTab() {
     return bearbeitungen[id]?.[feld] ?? original;
   }
 
-  function setEditWert(id: string, feld: string, wert: string) {
+  const setEditWert = useCallback((id: string, feld: string, wert: string) => {
     setBearbeitungen(prev => ({ ...prev, [id]: { ...(prev[id] ?? {}), [feld]: wert } }));
-  }
+  }, []);
 
   function istGeaendert(id: string, feld: string): boolean {
     return feld in (bearbeitungen[id] ?? {});
@@ -143,10 +134,10 @@ export default function AngebotTab() {
       const update: Record<string, unknown> = {};
       if ('position_nr' in felder) update.position_nr = felder.position_nr || null;
       if ('beschreibung'  in felder) update.beschreibung = felder.beschreibung;
-      if ('menge'         in felder) update.menge = eingabeZuNum(felder.menge);
+      if ('menge'         in felder) update.menge = parseGermanNumber(felder.menge);
       if ('einheit'       in felder) update.einheit = felder.einheit || null;
-      if ('einzelpreis'   in felder) update.einzelpreis = eingabeZuNum(felder.einzelpreis);
-      if ('gesamtpreis'   in felder) update.gesamtpreis = eingabeZuNum(felder.gesamtpreis) ?? pos.gesamtpreis;
+      if ('einzelpreis'   in felder) update.einzelpreis = parseGermanNumber(felder.einzelpreis);
+      if ('gesamtpreis'   in felder) update.gesamtpreis = parseGermanNumber(felder.gesamtpreis) ?? pos.gesamtpreis;
 
       const neueMenge    = ('menge'       in update ? update.menge       : pos.menge)       as number | null;
       const neuerEP      = ('einzelpreis' in update ? update.einzelpreis : pos.einzelpreis) as number | null;
@@ -162,10 +153,10 @@ export default function AngebotTab() {
       const u = { ...p };
       if ('position_nr'  in felder) u.position_nr  = felder.position_nr || null;
       if ('beschreibung' in felder) u.beschreibung  = felder.beschreibung;
-      if ('menge'        in felder) u.menge         = eingabeZuNum(felder.menge);
+      if ('menge'        in felder) u.menge         = parseGermanNumber(felder.menge);
       if ('einheit'      in felder) u.einheit       = felder.einheit || null;
-      if ('einzelpreis'  in felder) u.einzelpreis   = eingabeZuNum(felder.einzelpreis);
-      if ('gesamtpreis'  in felder) u.gesamtpreis   = eingabeZuNum(felder.gesamtpreis) ?? p.gesamtpreis;
+      if ('einzelpreis'  in felder) u.einzelpreis   = parseGermanNumber(felder.einzelpreis);
+      if ('gesamtpreis'  in felder) u.gesamtpreis   = parseGermanNumber(felder.gesamtpreis) ?? p.gesamtpreis;
       const neueMenge = u.menge;
       const neuerEP   = u.einzelpreis;
       if (neueMenge != null && neuerEP != null && ('menge' in felder || 'einzelpreis' in felder)) {
@@ -516,13 +507,13 @@ ${zeilen}
                                     className={editKlasse(p.id, 'beschreibung', 'text-gray-800 dark:text-gray-200')} />
                                 </td>
                                 <td className="px-4 py-2">
-                                  <input value={editWert(p.id, 'einzelpreis', numZuEingabe(p.einzelpreis))}
+                                  <input value={editWert(p.id, 'einzelpreis', formatGermanNumber(p.einzelpreis))}
                                     onChange={e => setEditWert(p.id, 'einzelpreis', e.target.value)}
                                     className={editKlasse(p.id, 'einzelpreis', 'text-right text-gray-500 dark:text-gray-400')}
                                     placeholder="–" />
                                 </td>
                                 <td className="px-4 py-2">
-                                  <input value={editWert(p.id, 'gesamtpreis', numZuEingabe(p.gesamtpreis))}
+                                  <input value={editWert(p.id, 'gesamtpreis', formatGermanNumber(p.gesamtpreis))}
                                     onChange={e => setEditWert(p.id, 'gesamtpreis', e.target.value)}
                                     className={editKlasse(p.id, 'gesamtpreis', 'text-right font-medium text-gray-900 dark:text-white')} />
                                 </td>
@@ -588,12 +579,12 @@ ${zeilen}
                                       className={editKlasse(base.id, 'beschreibung', 'text-gray-800 dark:text-gray-200')} />
                                   </td>
                                   <td className="px-4 py-2">
-                                    <input value={editWert(base.id, 'einzelpreis', numZuEingabe(base.einzelpreis))}
+                                    <input value={editWert(base.id, 'einzelpreis', formatGermanNumber(base.einzelpreis))}
                                       onChange={e => setEditWert(base.id, 'einzelpreis', e.target.value)}
                                       className={editKlasse(base.id, 'einzelpreis', 'text-right text-gray-500 dark:text-gray-400')} placeholder="–" />
                                   </td>
                                   <td className="px-4 py-2">
-                                    <input value={editWert(base.id, 'gesamtpreis', numZuEingabe(base.gesamtpreis))}
+                                    <input value={editWert(base.id, 'gesamtpreis', formatGermanNumber(base.gesamtpreis))}
                                       onChange={e => setEditWert(base.id, 'gesamtpreis', e.target.value)}
                                       className={editKlasse(base.id, 'gesamtpreis', 'text-right font-medium text-gray-900 dark:text-white')} />
                                   </td>
@@ -626,12 +617,12 @@ ${zeilen}
                                     </div>
                                   </td>
                                   <td className="px-4 py-2">
-                                    <input value={editWert(alt.id, 'einzelpreis', numZuEingabe(alt.einzelpreis))}
+                                    <input value={editWert(alt.id, 'einzelpreis', formatGermanNumber(alt.einzelpreis))}
                                       onChange={e => setEditWert(alt.id, 'einzelpreis', e.target.value)}
                                       className={editKlasse(alt.id, 'einzelpreis', 'text-right text-gray-500 dark:text-gray-400')} placeholder="–" />
                                   </td>
                                   <td className="px-4 py-2">
-                                    <input value={editWert(alt.id, 'gesamtpreis', numZuEingabe(alt.gesamtpreis))}
+                                    <input value={editWert(alt.id, 'gesamtpreis', formatGermanNumber(alt.gesamtpreis))}
                                       onChange={e => setEditWert(alt.id, 'gesamtpreis', e.target.value)}
                                       className={editKlasse(alt.id, 'gesamtpreis', 'text-right font-medium text-gray-900 dark:text-white')} />
                                   </td>

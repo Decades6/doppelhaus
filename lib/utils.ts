@@ -13,6 +13,17 @@ export function formatDatumMitUhrzeit(iso: string): string {
   });
 }
 
+export function parseGermanNumber(str: string): number | null {
+  if (!str.trim()) return null;
+  const n = parseFloat(str.replace(/\./g, '').replace(',', '.'));
+  return isNaN(n) ? null : n;
+}
+
+export function formatGermanNumber(num: number | null | undefined): string {
+  if (num == null) return '';
+  return num.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 export function comparePositionNr(a: string | null, b: string | null): number {
   if (!a && !b) return 0;
   if (!a) return 1;

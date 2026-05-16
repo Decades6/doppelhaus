@@ -61,13 +61,11 @@ export default function UploadPage() {
         .from('parser_korrekturen')
         .select('beschreibung_prefix, einheit');
       if (korrekturen && korrekturen.length > 0) {
-        geparste = geparste.map(p => {
-          const korr = korrekturen.find(k =>
-            p.beschreibung.substring(0, 50) === k.beschreibung_prefix ||
-            p.beschreibung.startsWith(k.beschreibung_prefix)
-          );
-          return korr ? { ...p, einheit: korr.einheit } : p;
-        });
+        const korrMap = new Map(korrekturen.map(k => [k.beschreibung_prefix, k.einheit]));
+        geparste = geparste.map(p => ({
+          ...p,
+          einheit: korrMap.get(p.beschreibung.substring(0, 50)) ?? p.einheit,
+        }));
       }
 
       await speichernMitDaten(geparste, file.name, typeof json.nettosumme === 'number' ? json.nettosumme : null);

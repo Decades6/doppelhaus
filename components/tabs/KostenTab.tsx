@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Position, Version } from '@/lib/types';
-import { formatEuro, comparePositionNr } from '@/lib/utils';
+import { formatEuro, comparePositionNr, parseGermanNumber, formatGermanNumber } from '@/lib/utils';
 
 // Anschlüsse bleiben als feste Einzelfelder in kosten_manuell
 interface AnschlussKosten {
@@ -56,14 +56,6 @@ interface MaterialGewerk {
   material_summe: number;
 }
 
-function parseEingabe(wert: string): number {
-  return parseFloat(wert.replace(/\./g, '').replace(',', '.')) || 0;
-}
-
-function formatEingabe(wert: number): string {
-  if (wert === 0) return '';
-  return wert.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
 
 const LEER_FORM = { bezeichnung: '', betrag: '' };
 
@@ -130,7 +122,7 @@ export default function KostenTab() {
       for (const row of anschlussRows) {
         if (row.schluessel in LEER_ANSCHLUESSE) {
           (geladen as Record<string, number>)[row.schluessel] = row.betrag ?? 0;
-          eingaben[row.schluessel] = row.betrag ? formatEingabe(row.betrag) : '';
+          eingaben[row.schluessel] = row.betrag ? formatGermanNumber(row.betrag) : '';
         }
       }
       setAnschluesse({ ...LEER_ANSCHLUESSE, ...geladen });
@@ -151,7 +143,7 @@ export default function KostenTab() {
 
   async function anschlussGeaendert(schluessel: keyof AnschlussKosten, rohwert: string) {
     setAnschlussEingaben(prev => ({ ...prev, [schluessel]: rohwert }));
-    const betrag = parseEingabe(rohwert);
+    const betrag = parseGermanNumber(rohwert) ?? 0;
     setAnschluesse(prev => ({ ...prev, [schluessel]: betrag }));
 
     if (speicherTimeout.current) clearTimeout(speicherTimeout.current);
@@ -166,7 +158,7 @@ export default function KostenTab() {
   async function positionHinzufuegen(kategorie: Kategorie) {
     const f = neuForm[kategorie] ?? LEER_FORM;
     if (!f.bezeichnung.trim()) return;
-    const betrag = parseEingabe(f.betrag);
+    const betrag = parseGermanNumber(f.betrag) ?? 0;
     if (betrag <= 0) return;
 
     const { data: { user } } = await supabase.auth.getUser();
@@ -188,7 +180,7 @@ export default function KostenTab() {
 
   const eigenleistungGesamt = eigenleistungGewerke.reduce((s, g) => s + g.eigenleistung_summe, 0);
   const brutto = version?.nettosumme ? (version.nettosumme - eigenleistungGesamt) * 1.19 : 0;
-  const grundstueckspreis = parseEingabe(grundstueckspreisEingabe);
+  const grundstueckspreis = parseGermanNumber(grundstueckspreisEingabe) ?? 0;
   const vorschlagNebenkosten = grundstueckspreis > 0 ? Math.round(grundstueckspreis * 0.055 * 100) / 100 : 0;
   const vorschlagNotar = grundstueckspreis > 0 ? Math.round((grundstueckspreis + brutto) * 0.015 * 100) / 100 : 0;
   const materialGesamt = materialGewerke.reduce((s, g) => s + g.material_summe, 0);
@@ -283,13 +275,13 @@ export default function KostenTab() {
                   {grundstueckspreis > 0 && (
                     <div className="flex items-center gap-2 flex-wrap">
                       <button
-                        onClick={() => setNeuForm(prev => ({ ...prev, nebenkosten: { bezeichnung: 'Grunderwerbsteuer (5,5 %)', betrag: formatEingabe(vorschlagNebenkosten) } }))}
+                        onClick={() => setNeuForm(prev => ({ ...prev, nebenkosten: { bezeichnung: 'Grunderwerbsteuer (5,5 %)', betrag: formatGermanNumber(vorschlagNebenkosten) } }))}
                         className="text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 px-3 py-1 rounded-full hover:bg-amber-200 transition-colors"
                         title="Grunderwerbsteuer Hamburg: 5,5 % vom Grundstückspreis">
                         Nebenkosten {formatEuro(vorschlagNebenkosten)} vorschlagen
                       </button>
                       <button
-                        onClick={() => setNeuForm(prev => ({ ...prev, notar: { bezeichnung: 'Notar & Grundbuch (1,5 %)', betrag: formatEingabe(vorschlagNotar) } }))}
+                        onClick={() => setNeuForm(prev => ({ ...prev, notar: { bezeichnung: 'Notar & Grundbuch (1,5 %)', betrag: formatGermanNumber(vorschlagNotar) } }))}
                         className="text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 px-3 py-1 rounded-full hover:bg-amber-200 transition-colors"
                         title="Notar + Grundbuch: 1,5 % von Grundstück + Baukosten">
                         Notar {formatEuro(vorschlagNotar)} vorschlagen
@@ -339,7 +331,7 @@ export default function KostenTab() {
                           className="w-28 text-right text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
                         <span className="text-xs text-gray-400">€</span>
                         <button onClick={() => positionHinzufuegen(key)}
-                          disabled={!form.bezeichnung.trim() || parseEingabe(form.betrag) <= 0}
+                          disabled={!form.bezeichnung.trim() || (parseGermanNumber(form.betrag) ?? 0) <= 0}
                           className="text-xs text-blue-500 hover:text-blue-700 dark:hover:text-blue-400 disabled:text-gray-300 dark:disabled:text-gray-600 disabled:cursor-not-allowed transition-colors whitespace-nowrap">
                           + Hinzufügen
                         </button>
@@ -412,7 +404,7 @@ export default function KostenTab() {
                           className="w-28 text-right text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
                         <span className="text-xs text-gray-400">€</span>
                         <button onClick={() => positionHinzufuegen(key)}
-                          disabled={!form.bezeichnung.trim() || parseEingabe(form.betrag) <= 0}
+                          disabled={!form.bezeichnung.trim() || (parseGermanNumber(form.betrag) ?? 0) <= 0}
                           className="text-xs text-blue-500 hover:text-blue-700 dark:hover:text-blue-400 disabled:text-gray-300 dark:disabled:text-gray-600 disabled:cursor-not-allowed transition-colors whitespace-nowrap">
                           + Hinzufügen
                         </button>
