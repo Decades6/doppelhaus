@@ -7,12 +7,34 @@ import { formatEuro } from '@/lib/utils';
 
 const KATEGORIEN = ['Bauträger', 'Notar/Grundbuch', 'Anschlüsse', 'Material', 'Eigenleistung', 'Sonstiges'];
 
+const KOSTEN_KAT_NAMEN: Record<string, string> = {
+  nebenkosten: 'Nebenkosten',
+  notar: 'Notar',
+  vermessung: 'Vermessung',
+  erdarbeiten: 'Erdarbeiten',
+  kueche: 'Küche',
+  sonstiges: 'Sonstiges',
+};
+
+const KOSTEN_ZU_ZAHLUNG: Record<string, string> = {
+  notar: 'Notar/Grundbuch',
+  nebenkosten: 'Sonstiges',
+  vermessung: 'Sonstiges',
+  erdarbeiten: 'Sonstiges',
+  kueche: 'Sonstiges',
+  sonstiges: 'Sonstiges',
+};
+
+interface KostenVorlage { id: string; kategorie: string; bezeichnung: string; betrag: number; }
+
 function formatDatumDE(iso: string): string {
   return new Date(iso + 'T00:00:00').toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
 export default function ZahlungenTab() {
   const [zahlungen, setZahlungen] = useState<Zahlung[]>([]);
+  const [kostenVorlagen, setKostenVorlagen] = useState<KostenVorlage[]>([]);
+  const [vorlageId, setVorlageId] = useState('');
   const [laden, setLaden] = useState(true);
   const [speichern, setSpeichern] = useState(false);
   const [form, setForm] = useState({
@@ -25,9 +47,26 @@ export default function ZahlungenTab() {
   useEffect(() => { ladeZahlungen(); }, []);
 
   async function ladeZahlungen() {
-    const { data } = await supabase.from('zahlungen').select('*').order('datum', { ascending: false });
-    if (data) setZahlungen(data as Zahlung[]);
+    const [{ data: z }, { data: v }] = await Promise.all([
+      supabase.from('zahlungen').select('*').order('datum', { ascending: false }),
+      supabase.from('kosten_positionen').select('id, kategorie, bezeichnung, betrag').order('kategorie').order('bezeichnung'),
+    ]);
+    if (z) setZahlungen(z as Zahlung[]);
+    if (v) setKostenVorlagen(v as KostenVorlage[]);
     setLaden(false);
+  }
+
+  function vorlageWaehlen(id: string) {
+    setVorlageId(id);
+    if (!id) return;
+    const v = kostenVorlagen.find(v => v.id === id);
+    if (!v) return;
+    setForm(p => ({
+      ...p,
+      beschreibung: v.bezeichnung,
+      betrag: v.betrag.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      kategorie: KOSTEN_ZU_ZAHLUNG[v.kategorie] ?? 'Sonstiges',
+    }));
   }
 
   async function hinzufuegen() {
@@ -42,6 +81,7 @@ export default function ZahlungenTab() {
     if (!error && data) {
       setZahlungen(prev => [data as Zahlung, ...prev].sort((a, b) => b.datum.localeCompare(a.datum)));
       setForm(prev => ({ ...prev, beschreibung: '', betrag: '' }));
+      setVorlageId('');
     }
     setSpeichern(false);
   }
@@ -76,6 +116,24 @@ export default function ZahlungenTab() {
       {/* Formular */}
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 mb-6">
         <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-300 mb-4">Neue Zahlung erfassen</h3>
+        {kostenVorlagen.length > 0 && (
+          <div className="mb-4">
+            <label className="text-xs text-gray-400 mb-1 block">Schnellauswahl aus Kostenpunkten</label>
+            <select value={vorlageId} onChange={e => vorlageWaehlen(e.target.value)}
+              className="w-full text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100">
+              <option value="">– Kostenpunkt wählen (optional) –</option>
+              {[...new Set(kostenVorlagen.map(v => v.kategorie))].map(kat => (
+                <optgroup key={kat} label={KOSTEN_KAT_NAMEN[kat] ?? kat}>
+                  {kostenVorlagen.filter(v => v.kategorie === kat).map(v => (
+                    <option key={v.id} value={v.id}>
+                      {v.bezeichnung} – {formatEuro(v.betrag)}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </div>
+        )}
         <div className="flex gap-3 items-end flex-wrap">
           <div>
             <label className="text-xs text-gray-400 mb-1 block">Datum</label>
