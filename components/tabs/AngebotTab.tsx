@@ -327,8 +327,8 @@ ${zeilen}
                     <thead>
                       <tr className="text-xs text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-600">
                         <th className="px-4 py-2 text-left font-medium w-20">Pos.</th>
+                        <th className="px-4 py-2 text-left font-medium w-28">Menge</th>
                         <th className="px-4 py-2 text-left font-medium">Beschreibung</th>
-                        <th className="px-4 py-2 text-right font-medium w-28">Menge</th>
                         <th className="px-4 py-2 text-right font-medium w-28">EP</th>
                         <th className="px-4 py-2 text-right font-medium w-32">GP</th>
                         <th className="px-4 py-2 text-center font-medium w-32">Aktion</th>
@@ -347,13 +347,13 @@ ${zeilen}
                               'hover:bg-gray-50 dark:hover:bg-gray-700/50'
                             }`}>
                               <td className="px-4 py-3 text-gray-400 dark:text-gray-500 text-xs whitespace-nowrap">{p.position_nr || '–'}</td>
+                              <td className="px-4 py-3 text-left text-gray-500 dark:text-gray-400 whitespace-nowrap">{p.menge != null ? `${p.menge} ${p.einheit || ''}`.trim() : '–'}</td>
                               <td className="px-4 py-3 text-gray-800 dark:text-gray-200">
                                 <div className="flex items-center gap-2">
                                   {p.eventual && <span className="text-xs px-1.5 py-0.5 rounded bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400 font-medium shrink-0">Eventual</span>}
                                   {p.beschreibung}
                                 </div>
                               </td>
-                              <td className="px-4 py-3 text-right text-gray-500 dark:text-gray-400 whitespace-nowrap">{p.menge != null ? `${p.menge} ${p.einheit || ''}`.trim() : '–'}</td>
                               <td className="px-4 py-3 text-right text-gray-500 dark:text-gray-400 whitespace-nowrap">{p.einzelpreis != null ? formatEuro(p.einzelpreis) : '–'}</td>
                               <td className={`px-4 py-3 text-right font-medium whitespace-nowrap ${p.eigenleistung ? 'line-through text-gray-300 dark:text-gray-600' : 'text-gray-900 dark:text-white'}`}>{formatEuro(p.gesamtpreis)}</td>
                               <td className="px-4 py-3 text-center">
@@ -374,8 +374,8 @@ ${zeilen}
                             <>
                               <tr key={base.id} className={`border-l-2 border-blue-300 dark:border-blue-600 transition-colors ${altAktiv ? 'opacity-30' : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'}`}>
                                 <td className="px-4 py-3 text-gray-400 dark:text-gray-500 text-xs whitespace-nowrap">{base.position_nr || '–'}</td>
+                                <td className="px-4 py-3 text-left text-gray-500 dark:text-gray-400 whitespace-nowrap">{base.menge != null ? `${base.menge} ${base.einheit || ''}`.trim() : '–'}</td>
                                 <td className={`px-4 py-3 dark:text-gray-200 ${altAktiv ? 'line-through text-gray-400' : 'text-gray-800'}`}>{base.beschreibung}</td>
-                                <td className="px-4 py-3 text-right text-gray-500 dark:text-gray-400 whitespace-nowrap">{base.menge != null ? `${base.menge} ${base.einheit || ''}`.trim() : '–'}</td>
                                 <td className="px-4 py-3 text-right text-gray-500 dark:text-gray-400 whitespace-nowrap">{base.einzelpreis != null ? formatEuro(base.einzelpreis) : '–'}</td>
                                 <td className={`px-4 py-3 text-right font-medium whitespace-nowrap ${altAktiv ? 'line-through text-gray-300 dark:text-gray-600' : 'text-gray-900 dark:text-white'}`}>{formatEuro(base.gesamtpreis)}</td>
                                 <td className="px-4 py-3 text-center">
@@ -392,13 +392,13 @@ ${zeilen}
                                     <span className="text-xs text-gray-400 dark:text-gray-500">{alt.position_nr || '–'}</span>
                                   </div>
                                 </td>
+                                <td className="px-4 py-3 text-left text-gray-500 dark:text-gray-400 whitespace-nowrap">{alt.menge != null ? `${alt.menge} ${alt.einheit || ''}`.trim() : '–'}</td>
                                 <td className="px-4 py-3 text-gray-800 dark:text-gray-200">
                                   <div className="flex items-center gap-2">
                                     <span className="text-xs px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400 font-medium shrink-0">Alternativ</span>
                                     {alt.beschreibung}
                                   </div>
                                 </td>
-                                <td className="px-4 py-3 text-right text-gray-500 dark:text-gray-400 whitespace-nowrap">{alt.menge != null ? `${alt.menge} ${alt.einheit || ''}`.trim() : '–'}</td>
                                 <td className="px-4 py-3 text-right text-gray-500 dark:text-gray-400 whitespace-nowrap">{alt.einzelpreis != null ? formatEuro(alt.einzelpreis) : '–'}</td>
                                 <td className={`px-4 py-3 text-right font-medium whitespace-nowrap ${altAktiv ? 'text-blue-700 dark:text-blue-300' : 'text-gray-900 dark:text-white'}`}>{formatEuro(alt.gesamtpreis)}</td>
                                 <td className="px-4 py-3 text-center">
