@@ -6,6 +6,7 @@ import AngebotTab from '@/components/tabs/AngebotTab';
 import EigenleistungenTab from '@/components/tabs/EigenleistungenTab';
 import KostenTab from '@/components/tabs/KostenTab';
 import ZahlungenTab from '@/components/tabs/ZahlungenTab';
+import KalenderTab from '@/components/tabs/KalenderTab';
 
 const TABS = [
   { id: 'uebersicht',      label: 'Übersicht' },
@@ -13,6 +14,7 @@ const TABS = [
   { id: 'eigenleistungen', label: 'Eigenleistungen' },
   { id: 'kosten',          label: 'Kosten' },
   { id: 'zahlungen',       label: 'Zahlungen' },
+  { id: 'kalender',        label: 'Termine' },
 ] as const;
 
 type TabId = typeof TABS[number]['id'];
@@ -45,6 +47,7 @@ export default function Dashboard() {
       {aktuellerTab === 'eigenleistungen' && <EigenleistungenTab />}
       {aktuellerTab === 'kosten'          && <KostenTab />}
       {aktuellerTab === 'zahlungen'       && <ZahlungenTab />}
+      {aktuellerTab === 'kalender'        && <KalenderTab />}
     </div>
   );
 }

@@ -35,6 +35,18 @@ export interface EigenleistungMaterial {
   created_at: string;
 }
 
+export interface Termin {
+  id: string;
+  user_id: string;
+  titel: string;
+  datum: string;
+  uhrzeit_von: string | null;
+  uhrzeit_bis: string | null;
+  beschreibung: string | null;
+  ort: string | null;
+  created_at: string;
+}
+
 export interface Zahlung {
   id: string;
   user_id: string;
