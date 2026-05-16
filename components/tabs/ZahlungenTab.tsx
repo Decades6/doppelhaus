@@ -61,10 +61,14 @@ export default function ZahlungenTab() {
     if (!id) return;
     const v = kostenVorlagen.find(v => v.id === id);
     if (!v) return;
+    const bereitsGezahlt = zahlungen
+      .filter(z => z.beschreibung.trim().toLowerCase() === v.bezeichnung.trim().toLowerCase())
+      .reduce((s, z) => s + z.betrag, 0);
+    const rest = Math.max(v.betrag - bereitsGezahlt, 0);
     setForm(p => ({
       ...p,
       beschreibung: v.bezeichnung,
-      betrag: v.betrag.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      betrag: rest.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
       kategorie: KOSTEN_ZU_ZAHLUNG[v.kategorie] ?? 'Sonstiges',
     }));
   }
@@ -123,15 +127,22 @@ export default function ZahlungenTab() {
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 mb-6">
         <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-300 mb-4">Neue Zahlung erfassen</h3>
         {kostenVorlagen.length > 0 && (() => {
-          const bezahlteBezeichnungen = new Set(zahlungen.map(z => z.beschreibung.trim().toLowerCase()));
-          const offeneVorlagen = kostenVorlagen.filter(v => !bezahlteBezeichnungen.has(v.bezeichnung.trim().toLowerCase()));
+          const bezahltNachName = zahlungen.reduce((acc, z) => {
+            const key = z.beschreibung.trim().toLowerCase();
+            acc[key] = (acc[key] ?? 0) + z.betrag;
+            return acc;
+          }, {} as Record<string, number>);
+          const offeneVorlagen = kostenVorlagen
+            .map(v => ({ ...v, bezahlt: bezahltNachName[v.bezeichnung.trim().toLowerCase()] ?? 0 }))
+            .filter(v => v.bezahlt < v.betrag);
+          const vollBezahlt = kostenVorlagen.length - offeneVorlagen.length;
           const kategorien = [...new Set(offeneVorlagen.map(v => v.kategorie))];
           return (
             <div className="mb-4">
               <label className="text-xs text-gray-400 mb-1 block">
                 Schnellauswahl aus Kostenpunkten
-                {offeneVorlagen.length < kostenVorlagen.length && (
-                  <span className="ml-2 text-green-500">{kostenVorlagen.length - offeneVorlagen.length} bereits bezahlt</span>
+                {vollBezahlt > 0 && (
+                  <span className="ml-2 text-green-500">{vollBezahlt} vollständig bezahlt</span>
                 )}
               </label>
               <select value={vorlageId} onChange={e => vorlageWaehlen(e.target.value)}
@@ -139,11 +150,15 @@ export default function ZahlungenTab() {
                 <option value="">– Kostenpunkt wählen (optional) –</option>
                 {kategorien.map(kat => (
                   <optgroup key={kat} label={KOSTEN_KAT_NAMEN[kat] ?? kat}>
-                    {offeneVorlagen.filter(v => v.kategorie === kat).map(v => (
-                      <option key={v.id} value={v.id}>
-                        {v.bezeichnung} – {formatEuro(v.betrag)}
-                      </option>
-                    ))}
+                    {offeneVorlagen.filter(v => v.kategorie === kat).map(v => {
+                      const rest = v.betrag - v.bezahlt;
+                      const teilbezahlt = v.bezahlt > 0;
+                      return (
+                        <option key={v.id} value={v.id}>
+                          {v.bezeichnung} – {teilbezahlt ? `noch ${formatEuro(rest)} offen (von ${formatEuro(v.betrag)})` : formatEuro(v.betrag)}
+                        </option>
+                      );
+                    })}
                   </optgroup>
                 ))}
               </select>
