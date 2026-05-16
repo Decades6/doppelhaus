@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { Zahlung } from '@/lib/types';
 import { formatEuro } from '@/lib/utils';
 
-const KATEGORIEN = ['Bauträger', 'Notar/Grundbuch', 'Anschlüsse', 'Erdarbeiten', 'Material', 'Eigenleistung', 'Sonstiges'];
+const KATEGORIEN = ['Bauträger', 'Notar/Grundbuch', 'Anschlüsse', 'Erdarbeiten', 'Küche', 'Material', 'Eigenleistung', 'Sonstiges'];
 
 const KOSTEN_KAT_NAMEN: Record<string, string> = {
   nebenkosten: 'Nebenkosten',
@@ -21,7 +21,7 @@ const KOSTEN_ZU_ZAHLUNG: Record<string, string> = {
   nebenkosten: 'Sonstiges',
   vermessung: 'Sonstiges',
   erdarbeiten: 'Erdarbeiten',
-  kueche: 'Sonstiges',
+  kueche: 'Küche',
   sonstiges: 'Sonstiges',
 };
 
