@@ -83,11 +83,16 @@ export default function AngebotTab() {
 
   async function toggleGewerkEigenleistung(gewerk: string, alleMarkiert: boolean, e: React.MouseEvent) {
     e.stopPropagation();
+    const neuerWert = !alleMarkiert;
     const ids = positionen
-      .filter(p => p.gewerk === gewerk && !p.eventual && !p.alternativ && !p.nicht_im_angebot)
+      .filter(p => {
+        if (p.gewerk !== gewerk || p.nicht_im_angebot) return false;
+        // Markieren: Eventual/Alternativ überspringen
+        // Aufheben: alles clearen (inkl. evtl. manuell markierter Eventual-Positionen)
+        return neuerWert ? (!p.eventual && !p.alternativ) : true;
+      })
       .map(p => p.id);
     if (ids.length === 0) return;
-    const neuerWert = !alleMarkiert;
     await supabase.from('positionen').update({ eigenleistung: neuerWert }).in('id', ids);
     setPositionen(prev => prev.map(p => ids.includes(p.id) ? { ...p, eigenleistung: neuerWert } : p));
   }
