@@ -25,7 +25,7 @@ const ANSCHLUSS_NAMEN: Record<keyof AnschlussKosten, string> = {
 };
 
 // Dynamische Kategorien mit Unterpunkten
-const KATEGORIEN = ['nebenkosten', 'notar', 'vermessung', 'erdarbeiten', 'kueche'] as const;
+const KATEGORIEN = ['nebenkosten', 'notar', 'vermessung', 'erdarbeiten', 'kueche', 'sonstiges'] as const;
 type Kategorie = typeof KATEGORIEN[number];
 
 const KATEGORIEN_NAMEN: Record<Kategorie, string> = {
@@ -34,6 +34,7 @@ const KATEGORIEN_NAMEN: Record<Kategorie, string> = {
   vermessung: 'Vermessung',
   erdarbeiten: 'Erdarbeiten',
   kueche: 'Küche',
+  sonstiges: 'Sonstiges',
 };
 
 interface KostenPosition {
