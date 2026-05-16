@@ -1,47 +1,46 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Position, Version } from '@/lib/types';
 import { formatEuro, comparePositionNr } from '@/lib/utils';
 
-interface ManuelleKosten {
-  nebenkosten: number;
-  notar: number;
-  vermessung: number;
+// Anschlüsse bleiben als feste Einzelfelder in kosten_manuell
+interface AnschlussKosten {
   stromanschluss: number;
   wasseranschluss: number;
   sielanschluss: number;
   telekomanschluss: number;
-  erdarbeiten: number;
-  kueche: number;
 }
 
-const LEER_KOSTEN: ManuelleKosten = {
-  nebenkosten: 0, notar: 0, vermessung: 0,
+const LEER_ANSCHLUESSE: AnschlussKosten = {
   stromanschluss: 0, wasseranschluss: 0, sielanschluss: 0, telekomanschluss: 0,
-  erdarbeiten: 0, kueche: 0,
 };
 
-const BEZEICHNUNGEN: Record<keyof ManuelleKosten, string> = {
-  nebenkosten:      'Nebenkosten',
-  notar:            'Notar',
-  vermessung:       'Vermessung',
-  stromanschluss:   'Stromanschluss',
-  wasseranschluss:  'Wasseranschluss',
-  sielanschluss:    'Sielanschluss',
+const ANSCHLUSS_NAMEN: Record<keyof AnschlussKosten, string> = {
+  stromanschluss: 'Stromanschluss',
+  wasseranschluss: 'Wasseranschluss',
+  sielanschluss: 'Sielanschluss',
   telekomanschluss: 'Telekomanschluss',
-  erdarbeiten:      'Erdarbeiten',
-  kueche:           'Küche',
 };
 
-function parseEingabe(wert: string): number {
-  return parseFloat(wert.replace(/\./g, '').replace(',', '.')) || 0;
-}
+// Dynamische Kategorien mit Unterpunkten
+const KATEGORIEN = ['nebenkosten', 'notar', 'vermessung', 'erdarbeiten', 'kueche'] as const;
+type Kategorie = typeof KATEGORIEN[number];
 
-function formatEingabe(wert: number): string {
-  if (wert === 0) return '';
-  return wert.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const KATEGORIEN_NAMEN: Record<Kategorie, string> = {
+  nebenkosten: 'Nebenkosten',
+  notar: 'Notar',
+  vermessung: 'Vermessung',
+  erdarbeiten: 'Erdarbeiten',
+  kueche: 'Küche',
+};
+
+interface KostenPosition {
+  id: string;
+  kategorie: string;
+  bezeichnung: string;
+  betrag: number;
 }
 
 interface EigenleistungGewerk {
@@ -56,22 +55,25 @@ interface MaterialGewerk {
   material_summe: number;
 }
 
-function KostenInput({ wert, onChange }: { wert: string; onChange: (v: string) => void }) {
-  return (
-    <div className="flex items-center justify-end gap-1">
-      <input type="text" value={wert} onChange={e => onChange(e.target.value)} placeholder="0,00"
-        className="w-36 text-right text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100 print:border-0 print:bg-transparent" />
-      <span className="text-gray-400 text-xs print:hidden">€</span>
-    </div>
-  );
+function parseEingabe(wert: string): number {
+  return parseFloat(wert.replace(/\./g, '').replace(',', '.')) || 0;
 }
+
+function formatEingabe(wert: number): string {
+  if (wert === 0) return '';
+  return wert.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+const LEER_FORM = { bezeichnung: '', betrag: '' };
 
 export default function KostenTab() {
   const [version, setVersion] = useState<Version | null>(null);
   const [eigenleistungGewerke, setEigenleistungGewerke] = useState<EigenleistungGewerk[]>([]);
   const [materialGewerke, setMaterialGewerke] = useState<MaterialGewerk[]>([]);
-  const [kosten, setKosten] = useState<ManuelleKosten>(LEER_KOSTEN);
-  const [eingaben, setEingaben] = useState<Record<string, string>>({});
+  const [anschluesse, setAnschluesse] = useState<AnschlussKosten>(LEER_ANSCHLUESSE);
+  const [anschlussEingaben, setAnschlussEingaben] = useState<Record<string, string>>({});
+  const [kostenPositionen, setKostenPositionen] = useState<Record<string, KostenPosition[]>>({});
+  const [neuForm, setNeuForm] = useState<Record<string, { bezeichnung: string; betrag: string }>>({});
   const [laden, setLaden] = useState(true);
   const [speichern, setSpeichern] = useState(false);
   const [grundstueckspreisEingabe, setGrundstueckspreisEingabe] = useState('');
@@ -116,26 +118,40 @@ export default function KostenTab() {
       }
     }
 
-    const { data: manuelleRows } = await supabase.from('kosten_manuell').select('schluessel, betrag');
-    if (manuelleRows) {
-      const geladen: Partial<ManuelleKosten> = {};
-      const eingangsWerte: Record<string, string> = {};
-      for (const row of manuelleRows) {
-        if (row.schluessel in LEER_KOSTEN) {
+    const [{ data: anschlussRows }, { data: positionen }] = await Promise.all([
+      supabase.from('kosten_manuell').select('schluessel, betrag'),
+      supabase.from('kosten_positionen').select('id, kategorie, bezeichnung, betrag').order('created_at', { ascending: true }),
+    ]);
+
+    if (anschlussRows) {
+      const geladen: Partial<AnschlussKosten> = {};
+      const eingaben: Record<string, string> = {};
+      for (const row of anschlussRows) {
+        if (row.schluessel in LEER_ANSCHLUESSE) {
           (geladen as Record<string, number>)[row.schluessel] = row.betrag ?? 0;
-          eingangsWerte[row.schluessel] = row.betrag ? formatEingabe(row.betrag) : '';
+          eingaben[row.schluessel] = row.betrag ? formatEingabe(row.betrag) : '';
         }
       }
-      setKosten({ ...LEER_KOSTEN, ...geladen });
-      setEingaben(eingangsWerte);
+      setAnschluesse({ ...LEER_ANSCHLUESSE, ...geladen });
+      setAnschlussEingaben(eingaben);
     }
+
+    if (positionen) {
+      const grouped: Record<string, KostenPosition[]> = {};
+      for (const p of positionen as KostenPosition[]) {
+        if (!grouped[p.kategorie]) grouped[p.kategorie] = [];
+        grouped[p.kategorie].push(p);
+      }
+      setKostenPositionen(grouped);
+    }
+
     setLaden(false);
   }
 
-  async function feldGeaendert(schluessel: keyof ManuelleKosten, rohwert: string) {
-    setEingaben(prev => ({ ...prev, [schluessel]: rohwert }));
+  async function anschlussGeaendert(schluessel: keyof AnschlussKosten, rohwert: string) {
+    setAnschlussEingaben(prev => ({ ...prev, [schluessel]: rohwert }));
     const betrag = parseEingabe(rohwert);
-    setKosten(prev => ({ ...prev, [schluessel]: betrag }));
+    setAnschluesse(prev => ({ ...prev, [schluessel]: betrag }));
 
     if (speicherTimeout.current) clearTimeout(speicherTimeout.current);
     speicherTimeout.current = setTimeout(async () => {
@@ -146,14 +162,38 @@ export default function KostenTab() {
     }, 800);
   }
 
+  async function positionHinzufuegen(kategorie: Kategorie) {
+    const f = neuForm[kategorie] ?? LEER_FORM;
+    if (!f.bezeichnung.trim()) return;
+    const betrag = parseEingabe(f.betrag);
+    if (betrag <= 0) return;
+
+    const { data: { user } } = await supabase.auth.getUser();
+    const { data, error } = await supabase
+      .from('kosten_positionen')
+      .insert({ user_id: user?.id, kategorie, bezeichnung: f.bezeichnung.trim(), betrag })
+      .select().single();
+
+    if (!error && data) {
+      setKostenPositionen(prev => ({ ...prev, [kategorie]: [...(prev[kategorie] ?? []), data as KostenPosition] }));
+      setNeuForm(prev => ({ ...prev, [kategorie]: LEER_FORM }));
+    }
+  }
+
+  async function positionLoeschen(id: string, kategorie: Kategorie) {
+    await supabase.from('kosten_positionen').delete().eq('id', id);
+    setKostenPositionen(prev => ({ ...prev, [kategorie]: (prev[kategorie] ?? []).filter(p => p.id !== id) }));
+  }
+
   const eigenleistungGesamt = eigenleistungGewerke.reduce((s, g) => s + g.eigenleistung_summe, 0);
   const brutto = version?.nettosumme ? (version.nettosumme - eigenleistungGesamt) * 1.19 : 0;
   const grundstueckspreis = parseEingabe(grundstueckspreisEingabe);
   const vorschlagNebenkosten = grundstueckspreis > 0 ? Math.round(grundstueckspreis * 0.055 * 100) / 100 : 0;
   const vorschlagNotar = grundstueckspreis > 0 ? Math.round((grundstueckspreis + brutto) * 0.015 * 100) / 100 : 0;
   const materialGesamt = materialGewerke.reduce((s, g) => s + g.material_summe, 0);
-  const anschluesseGesamt = kosten.stromanschluss + kosten.wasseranschluss + kosten.sielanschluss + kosten.telekomanschluss;
-  const manuelleGesamt = Object.values(kosten).reduce((s, v) => s + v, 0);
+  const anschluesseGesamt = Object.values(anschluesse).reduce((s, v) => s + v, 0);
+  const positionenGesamt = Object.values(kostenPositionen).flat().reduce((s, p) => s + p.betrag, 0);
+  const manuelleGesamt = anschluesseGesamt + positionenGesamt;
   const gesamtFinanzierung = brutto + materialGesamt + manuelleGesamt;
 
   if (laden) return <div className="text-center py-16 text-gray-500">Lade Daten...</div>;
@@ -185,6 +225,8 @@ export default function KostenTab() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
+
+            {/* Hauskosten */}
             <tr className="bg-blue-50/50 dark:bg-blue-900/10">
               <td className="px-6 py-4 font-semibold text-gray-800 dark:text-white">Hauskosten</td>
               <td className="px-6 py-4 text-right font-semibold text-gray-800 dark:text-white">
@@ -202,6 +244,7 @@ export default function KostenTab() {
               </tr>
             )}
 
+            {/* Eigenleistung Materialkosten */}
             {materialGewerke.length > 0 && (
               <>
                 <tr className="bg-orange-50/50 dark:bg-orange-900/10">
@@ -222,8 +265,10 @@ export default function KostenTab() {
               </>
             )}
 
+            {/* Weitere Kosten — Header */}
             <tr><td colSpan={2} className="px-6 py-2 bg-gray-50 dark:bg-gray-700/50 text-xs font-semibold text-gray-400 uppercase tracking-wide">Weitere Kosten</td></tr>
 
+            {/* Pauschale-Hilfe */}
             <tr className="print:hidden bg-amber-50/50 dark:bg-amber-900/10">
               <td colSpan={2} className="px-6 py-3">
                 <div className="flex items-center gap-4 flex-wrap">
@@ -236,15 +281,17 @@ export default function KostenTab() {
                   </div>
                   {grundstueckspreis > 0 && (
                     <div className="flex items-center gap-2 flex-wrap">
-                      <button onClick={() => feldGeaendert('nebenkosten', formatEingabe(vorschlagNebenkosten))}
-                        className="text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 px-3 py-1 rounded-full hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors"
+                      <button
+                        onClick={() => setNeuForm(prev => ({ ...prev, nebenkosten: { bezeichnung: 'Grunderwerbsteuer (5,5 %)', betrag: formatEingabe(vorschlagNebenkosten) } }))}
+                        className="text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 px-3 py-1 rounded-full hover:bg-amber-200 transition-colors"
                         title="Grunderwerbsteuer Hamburg: 5,5 % vom Grundstückspreis">
-                        Nebenkosten {formatEuro(vorschlagNebenkosten)} übernehmen
+                        Nebenkosten {formatEuro(vorschlagNebenkosten)} vorschlagen
                       </button>
-                      <button onClick={() => feldGeaendert('notar', formatEingabe(vorschlagNotar))}
-                        className="text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 px-3 py-1 rounded-full hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors"
+                      <button
+                        onClick={() => setNeuForm(prev => ({ ...prev, notar: { bezeichnung: 'Notar & Grundbuch (1,5 %)', betrag: formatEingabe(vorschlagNotar) } }))}
+                        className="text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 px-3 py-1 rounded-full hover:bg-amber-200 transition-colors"
                         title="Notar + Grundbuch: 1,5 % von Grundstück + Baukosten">
-                        Notar {formatEuro(vorschlagNotar)} übernehmen
+                        Notar {formatEuro(vorschlagNotar)} vorschlagen
                       </button>
                     </div>
                   )}
@@ -252,41 +299,86 @@ export default function KostenTab() {
               </td>
             </tr>
 
-            {(['nebenkosten', 'notar', 'vermessung'] as (keyof ManuelleKosten)[]).map(key => (
-              <tr key={key}>
-                <td className="px-6 py-3 text-gray-700 dark:text-gray-200">{BEZEICHNUNGEN[key]}</td>
-                <td className="px-6 py-3 text-right"><KostenInput wert={eingaben[key] ?? ''} onChange={v => feldGeaendert(key, v)} /></td>
-              </tr>
-            ))}
+            {/* Dynamische Kategorien mit Unterpunkten */}
+            {KATEGORIEN.map(key => {
+              const positionen = kostenPositionen[key] ?? [];
+              const summe = positionen.reduce((s, p) => s + p.betrag, 0);
+              const form = neuForm[key] ?? LEER_FORM;
 
+              return (
+                <Fragment key={key}>
+                  <tr>
+                    <td className="px-6 py-3 font-medium text-gray-700 dark:text-gray-200">{KATEGORIEN_NAMEN[key]}</td>
+                    <td className="px-6 py-3 text-right text-gray-600 dark:text-gray-300">
+                      {summe > 0 ? formatEuro(summe) : <span className="text-gray-300 dark:text-gray-600">—</span>}
+                    </td>
+                  </tr>
+                  {positionen.map(pos => (
+                    <tr key={pos.id}>
+                      <td className="px-6 py-1.5 pl-10 text-xs text-gray-500 dark:text-gray-400">{pos.bezeichnung}</td>
+                      <td className="px-6 py-1.5 text-right text-xs text-gray-600 dark:text-gray-300">
+                        {formatEuro(pos.betrag)}
+                        <button onClick={() => positionLoeschen(pos.id, key)}
+                          className="ml-2 text-gray-300 hover:text-red-400 transition-colors print:hidden">×</button>
+                      </td>
+                    </tr>
+                  ))}
+                  <tr className="print:hidden">
+                    <td colSpan={2} className="px-6 pb-3 pl-10">
+                      <div className="flex items-center gap-2">
+                        <input type="text" value={form.bezeichnung}
+                          onChange={e => setNeuForm(prev => ({ ...prev, [key]: { ...prev[key] ?? LEER_FORM, bezeichnung: e.target.value } }))}
+                          onKeyDown={e => e.key === 'Enter' && positionHinzufuegen(key)}
+                          placeholder="Bezeichnung"
+                          className="flex-1 text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
+                        <input type="text" value={form.betrag}
+                          onChange={e => setNeuForm(prev => ({ ...prev, [key]: { ...prev[key] ?? LEER_FORM, betrag: e.target.value } }))}
+                          onKeyDown={e => e.key === 'Enter' && positionHinzufuegen(key)}
+                          placeholder="0,00"
+                          className="w-28 text-right text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
+                        <span className="text-xs text-gray-400">€</span>
+                        <button onClick={() => positionHinzufuegen(key)}
+                          disabled={!form.bezeichnung.trim() || parseEingabe(form.betrag) <= 0}
+                          className="text-xs text-blue-500 hover:text-blue-700 dark:hover:text-blue-400 disabled:text-gray-300 dark:disabled:text-gray-600 disabled:cursor-not-allowed transition-colors whitespace-nowrap">
+                          + Hinzufügen
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                </Fragment>
+              );
+            })}
+
+            {/* Anschlüsse (feste Unterpunkte) */}
             <tr>
-              <td className="px-6 py-3 text-gray-700 dark:text-gray-200">
-                Anschlüsse <span className="ml-2 text-xs text-gray-400">(Strom, Wasser, Siel, Telekom)</span>
+              <td className="px-6 py-3 font-medium text-gray-700 dark:text-gray-200">
+                Anschlüsse <span className="ml-2 text-xs font-normal text-gray-400">(Strom, Wasser, Siel, Telekom)</span>
               </td>
-              <td className="px-6 py-3 text-right text-gray-500 dark:text-gray-400 text-sm">
+              <td className="px-6 py-3 text-right text-gray-600 dark:text-gray-300">
                 {anschluesseGesamt > 0 ? formatEuro(anschluesseGesamt) : <span className="text-gray-300 dark:text-gray-600">—</span>}
               </td>
             </tr>
-            {(['stromanschluss', 'wasseranschluss', 'sielanschluss', 'telekomanschluss'] as (keyof ManuelleKosten)[]).map(key => (
+            {(Object.keys(ANSCHLUSS_NAMEN) as (keyof AnschlussKosten)[]).map(key => (
               <tr key={key}>
-                <td className="px-6 py-2 pl-10 text-gray-500 dark:text-gray-400">{BEZEICHNUNGEN[key]}</td>
-                <td className="px-6 py-2 text-right"><KostenInput wert={eingaben[key] ?? ''} onChange={v => feldGeaendert(key, v)} /></td>
+                <td className="px-6 py-2 pl-10 text-gray-500 dark:text-gray-400">{ANSCHLUSS_NAMEN[key]}</td>
+                <td className="px-6 py-2 text-right">
+                  <div className="flex items-center justify-end gap-1">
+                    <input type="text" value={anschlussEingaben[key] ?? ''} onChange={e => anschlussGeaendert(key, e.target.value)}
+                      placeholder="0,00"
+                      className="w-36 text-right text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100 print:border-0 print:bg-transparent" />
+                    <span className="text-gray-400 text-xs print:hidden">€</span>
+                  </div>
+                </td>
               </tr>
             ))}
 
-            {(['erdarbeiten', 'kueche'] as (keyof ManuelleKosten)[]).map(key => (
-              <tr key={key}>
-                <td className="px-6 py-3 text-gray-700 dark:text-gray-200">{BEZEICHNUNGEN[key]}</td>
-                <td className="px-6 py-3 text-right"><KostenInput wert={eingaben[key] ?? ''} onChange={v => feldGeaendert(key, v)} /></td>
-              </tr>
-            ))}
-
+            {/* Gesamtsumme */}
             <tr className="bg-gray-900 dark:bg-gray-950 print:bg-gray-100">
-              <td className="px-6 py-5 font-bold text-white dark:text-white print:text-gray-900 text-base">
+              <td className="px-6 py-5 font-bold text-white print:text-gray-900 text-base">
                 Gesamtfinanzierungsbedarf
                 <div className="text-xs font-normal text-gray-400 mt-0.5">Hauskosten + Materialkosten + Weitere Kosten</div>
               </td>
-              <td className="px-6 py-5 text-right font-bold text-white dark:text-white print:text-gray-900 text-xl">
+              <td className="px-6 py-5 text-right font-bold text-white print:text-gray-900 text-xl">
                 {formatEuro(gesamtFinanzierung)}
               </td>
             </tr>
