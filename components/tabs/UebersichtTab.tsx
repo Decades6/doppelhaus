@@ -4,18 +4,43 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { formatEuro } from '@/lib/utils';
 
+interface KostenKategorie {
+  name: string;
+  betrag: number;
+  farbe: string;
+}
+
 interface UebersichtDaten {
   nettosumme: number;
   versionName: string;
   eigenleistungNetto: number;
   materialkosten: number;
-  weitereKosten: number;
+  anschluesseGesamt: number;
+  kostenNachKategorie: Record<string, number>;
   bezahlt: number;
   anzahlPositionen: number;
   anzahlEigenleistung: number;
 }
 
 type TabId = 'uebersicht' | 'angebot' | 'eigenleistungen' | 'kosten' | 'zahlungen';
+
+const KOSTEN_FARBEN: Record<string, string> = {
+  nebenkosten: 'bg-indigo-500',
+  notar:       'bg-purple-500',
+  vermessung:  'bg-teal-500',
+  erdarbeiten: 'bg-orange-500',
+  kueche:      'bg-pink-500',
+  sonstiges:   'bg-gray-400',
+};
+
+const KOSTEN_NAMEN: Record<string, string> = {
+  nebenkosten: 'Nebenkosten',
+  notar:       'Notar',
+  vermessung:  'Vermessung',
+  erdarbeiten: 'Erdarbeiten',
+  kueche:      'Küche',
+  sonstiges:   'Sonstiges',
+};
 
 export default function UebersichtTab({ onTabWechsel }: { onTabWechsel: (tab: TabId) => void }) {
   const [daten, setDaten] = useState<UebersichtDaten | null>(null);
@@ -35,22 +60,35 @@ export default function UebersichtTab({ onTabWechsel }: { onTabWechsel: (tab: Ta
       { data: pos },
       { data: eigenPos },
       { data: mat },
-      { data: kosten },
+      { data: anschlussRows },
+      { data: kostenPos },
       { data: zahlungen },
     ] = await Promise.all([
       supabase.from('positionen').select('id').eq('version_id', v.id),
       supabase.from('positionen').select('gesamtpreis').eq('version_id', v.id).eq('eigenleistung', true).eq('nicht_im_angebot', false),
       supabase.from('eigenleistung_materialien').select('gesamtpreis'),
-      supabase.from('kosten_manuell').select('betrag'),
+      supabase.from('kosten_manuell').select('schluessel, betrag'),
+      supabase.from('kosten_positionen').select('kategorie, betrag'),
       supabase.from('zahlungen').select('betrag'),
     ]);
+
+    const ANSCHLUSS_SCHLUESSEL = new Set(['stromanschluss', 'wasseranschluss', 'sielanschluss', 'telekomanschluss']);
+    const anschluesseGesamt = (anschlussRows ?? [])
+      .filter(r => ANSCHLUSS_SCHLUESSEL.has(r.schluessel))
+      .reduce((s, r) => s + (r.betrag ?? 0), 0);
+
+    const kostenNachKategorie: Record<string, number> = {};
+    for (const p of (kostenPos ?? []) as { kategorie: string; betrag: number }[]) {
+      kostenNachKategorie[p.kategorie] = (kostenNachKategorie[p.kategorie] ?? 0) + p.betrag;
+    }
 
     setDaten({
       nettosumme: v.nettosumme ?? 0,
       versionName: v.name,
       eigenleistungNetto: (eigenPos ?? []).reduce((s, p) => s + p.gesamtpreis, 0),
       materialkosten: (mat ?? []).reduce((s, m) => s + m.gesamtpreis, 0),
-      weitereKosten: (kosten ?? []).reduce((s, k) => s + (k.betrag ?? 0), 0),
+      anschluesseGesamt,
+      kostenNachKategorie,
       bezahlt: (zahlungen ?? []).reduce((s, z) => s + z.betrag, 0),
       anzahlPositionen: pos?.length ?? 0,
       anzahlEigenleistung: eigenPos?.length ?? 0,
@@ -74,9 +112,20 @@ export default function UebersichtTab({ onTabWechsel }: { onTabWechsel: (tab: Ta
   }
 
   const bautraegerBrutto = (daten.nettosumme - daten.eigenleistungNetto) * 1.19;
-  const gesamtFinanzierung = bautraegerBrutto + daten.materialkosten + daten.weitereKosten;
+  const kostenPosGesamt = Object.values(daten.kostenNachKategorie).reduce((s, v) => s + v, 0);
+  const weitereKosten = daten.anschluesseGesamt + kostenPosGesamt;
+  const gesamtFinanzierung = bautraegerBrutto + daten.materialkosten + weitereKosten;
   const nochOffen = Math.max(0, gesamtFinanzierung - daten.bezahlt);
   const fortschritt = gesamtFinanzierung > 0 ? Math.min(100, (daten.bezahlt / gesamtFinanzierung) * 100) : 0;
+
+  // Alle Kostenstellen für den Verteilungsbalken
+  const kostenstellen: KostenKategorie[] = [
+    { name: 'Bauträger',     betrag: bautraegerBrutto,        farbe: 'bg-blue-600' },
+    { name: 'Materialkosten', betrag: daten.materialkosten,   farbe: 'bg-amber-500' },
+    { name: 'Anschlüsse',    betrag: daten.anschluesseGesamt, farbe: 'bg-cyan-500' },
+    ...Object.entries(daten.kostenNachKategorie)
+      .map(([kat, betrag]) => ({ name: KOSTEN_NAMEN[kat] ?? kat, betrag, farbe: KOSTEN_FARBEN[kat] ?? 'bg-gray-400' })),
+  ].filter(k => k.betrag > 0);
 
   return (
     <div className="space-y-6">
@@ -99,7 +148,7 @@ export default function UebersichtTab({ onTabWechsel }: { onTabWechsel: (tab: Ta
         </div>
       </div>
 
-      {/* Fortschrittsbalken */}
+      {/* Zahlungsfortschritt */}
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
         <div className="flex items-center justify-between mb-2">
           <span className="text-sm font-medium text-gray-700 dark:text-gray-200">Zahlungsfortschritt</span>
@@ -113,6 +162,42 @@ export default function UebersichtTab({ onTabWechsel }: { onTabWechsel: (tab: Ta
           <span>{formatEuro(nochOffen)} offen</span>
         </div>
       </div>
+
+      {/* Kostenverteilung */}
+      {kostenstellen.length > 0 && (
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
+          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-4">Kostenverteilung</h3>
+
+          {/* Gestapelter Balken */}
+          <div className="flex h-6 rounded-lg overflow-hidden mb-4 gap-px">
+            {kostenstellen.map(k => (
+              <div
+                key={k.name}
+                className={`${k.farbe} h-full transition-all`}
+                style={{ width: `${(k.betrag / gesamtFinanzierung) * 100}%` }}
+                title={`${k.name}: ${formatEuro(k.betrag)} (${Math.round((k.betrag / gesamtFinanzierung) * 100)}%)`}
+              />
+            ))}
+          </div>
+
+          {/* Legende */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
+            {kostenstellen.map(k => {
+              const prozent = Math.round((k.betrag / gesamtFinanzierung) * 100);
+              return (
+                <div key={k.name} className="flex items-start gap-2">
+                  <div className={`w-3 h-3 rounded-sm ${k.farbe} shrink-0 mt-0.5`} />
+                  <div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400">{k.name}</div>
+                    <div className="text-sm font-medium text-gray-800 dark:text-gray-100">{formatEuro(k.betrag)}</div>
+                    <div className="text-xs text-gray-400">{prozent} %</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Bereiche */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
@@ -137,7 +222,7 @@ export default function UebersichtTab({ onTabWechsel }: { onTabWechsel: (tab: Ta
         <button onClick={() => onTabWechsel('kosten')}
           className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 border border-gray-100 dark:border-gray-700 hover:border-purple-300 dark:hover:border-purple-600 transition-all text-left group hover:shadow-md">
           <div className="text-xs text-gray-400 uppercase tracking-wide mb-3">Kosten</div>
-          <div className="text-xl font-bold text-gray-700 dark:text-gray-200 mb-1">{formatEuro(daten.materialkosten + daten.weitereKosten)}</div>
+          <div className="text-xl font-bold text-gray-700 dark:text-gray-200 mb-1">{formatEuro(daten.materialkosten + weitereKosten)}</div>
           <div className="text-xs text-gray-400 mb-3">Material + Weitere Kosten</div>
           <div className="text-xs text-gray-400">Notar, Anschlüsse, Material etc.</div>
           <div className="text-xs text-blue-500 mt-3 group-hover:underline">→ Zur Kostenübersicht</div>
