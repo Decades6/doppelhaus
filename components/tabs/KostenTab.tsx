@@ -300,8 +300,8 @@ export default function KostenTab() {
               </td>
             </tr>
 
-            {/* Dynamische Kategorien mit Unterpunkten */}
-            {KATEGORIEN.map(key => {
+            {/* Dynamische Kategorien mit Unterpunkten (ohne Sonstiges — kommt nach Anschlüsse) */}
+            {KATEGORIEN.filter(k => k !== 'sonstiges').map(key => {
               const positionen = kostenPositionen[key] ?? [];
               const summe = positionen.reduce((s, p) => s + p.betrag, 0);
               const form = neuForm[key] ?? LEER_FORM;
@@ -372,6 +372,56 @@ export default function KostenTab() {
                 </td>
               </tr>
             ))}
+
+            {/* Sonstiges (immer letzter Punkt vor Gesamtsumme) */}
+            {(() => {
+              const key = 'sonstiges' as const;
+              const positionen = kostenPositionen[key] ?? [];
+              const summe = positionen.reduce((s, p) => s + p.betrag, 0);
+              const form = neuForm[key] ?? LEER_FORM;
+              return (
+                <Fragment key={key}>
+                  <tr>
+                    <td className="px-6 py-3 font-medium text-gray-700 dark:text-gray-200">{KATEGORIEN_NAMEN[key]}</td>
+                    <td className="px-6 py-3 text-right text-gray-600 dark:text-gray-300">
+                      {summe > 0 ? formatEuro(summe) : <span className="text-gray-300 dark:text-gray-600">—</span>}
+                    </td>
+                  </tr>
+                  {positionen.map(pos => (
+                    <tr key={pos.id}>
+                      <td className="px-6 py-1.5 pl-10 text-xs text-gray-500 dark:text-gray-400">{pos.bezeichnung}</td>
+                      <td className="px-6 py-1.5 text-right text-xs text-gray-600 dark:text-gray-300">
+                        {formatEuro(pos.betrag)}
+                        <button onClick={() => positionLoeschen(pos.id, key)}
+                          className="ml-2 text-gray-300 hover:text-red-400 transition-colors print:hidden">×</button>
+                      </td>
+                    </tr>
+                  ))}
+                  <tr className="print:hidden">
+                    <td colSpan={2} className="px-6 pb-3 pl-10">
+                      <div className="flex items-center gap-2">
+                        <input type="text" value={form.bezeichnung}
+                          onChange={e => setNeuForm(prev => ({ ...prev, [key]: { ...prev[key] ?? LEER_FORM, bezeichnung: e.target.value } }))}
+                          onKeyDown={e => e.key === 'Enter' && positionHinzufuegen(key)}
+                          placeholder="Bezeichnung"
+                          className="flex-1 text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
+                        <input type="text" value={form.betrag}
+                          onChange={e => setNeuForm(prev => ({ ...prev, [key]: { ...prev[key] ?? LEER_FORM, betrag: e.target.value } }))}
+                          onKeyDown={e => e.key === 'Enter' && positionHinzufuegen(key)}
+                          placeholder="0,00"
+                          className="w-28 text-right text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
+                        <span className="text-xs text-gray-400">€</span>
+                        <button onClick={() => positionHinzufuegen(key)}
+                          disabled={!form.bezeichnung.trim() || parseEingabe(form.betrag) <= 0}
+                          className="text-xs text-blue-500 hover:text-blue-700 dark:hover:text-blue-400 disabled:text-gray-300 dark:disabled:text-gray-600 disabled:cursor-not-allowed transition-colors whitespace-nowrap">
+                          + Hinzufügen
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                </Fragment>
+              );
+            })()}
 
             {/* Gesamtsumme */}
             <tr className="bg-gray-900 dark:bg-gray-950 print:bg-gray-100">
