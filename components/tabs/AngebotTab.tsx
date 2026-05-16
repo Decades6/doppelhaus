@@ -26,6 +26,16 @@ function buildPaare(sorted: Position[]): Gruppe[] {
   return result;
 }
 
+function numZuEingabe(wert: number | null | undefined): string {
+  if (wert == null) return '';
+  return wert.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function eingabeZuNum(wert: string): number | null {
+  if (!wert.trim()) return null;
+  return parseFloat(wert.replace(/\./g, '').replace(',', '.')) || null;
+}
+
 export default function AngebotTab() {
   const [positionen, setPositionen] = useState<Position[]>([]);
   const [aktuelleVersion, setAktuelleVersion] = useState<Version | null>(null);
@@ -33,6 +43,9 @@ export default function AngebotTab() {
   const [versionsAnzahl, setVersionsAnzahl] = useState(0);
   const [loading, setLoading] = useState(true);
   const [offeneGewerke, setOffeneGewerke] = useState<Set<string>>(new Set());
+  const [editModus, setEditModus] = useState(false);
+  const [bearbeitungen, setBearbeitungen] = useState<Record<string, Record<string, string>>>({});
+  const [speichertEdit, setSpeichertEdit] = useState(false);
 
   useEffect(() => { loadDaten(); }, []);
 
@@ -87,8 +100,6 @@ export default function AngebotTab() {
     const ids = positionen
       .filter(p => {
         if (p.gewerk !== gewerk || p.nicht_im_angebot) return false;
-        // Markieren: Eventual/Alternativ überspringen
-        // Aufheben: alles clearen (inkl. evtl. manuell markierter Eventual-Positionen)
         return neuerWert ? (!p.eventual && !p.alternativ) : true;
       })
       .map(p => p.id);
@@ -96,6 +107,79 @@ export default function AngebotTab() {
     await supabase.from('positionen').update({ eigenleistung: neuerWert }).in('id', ids);
     setPositionen(prev => prev.map(p => ids.includes(p.id) ? { ...p, eigenleistung: neuerWert } : p));
   }
+
+  // --- Edit-Modus Hilfsfunktionen ---
+
+  function editWert(id: string, feld: string, original: string): string {
+    return bearbeitungen[id]?.[feld] ?? original;
+  }
+
+  function setEditWert(id: string, feld: string, wert: string) {
+    setBearbeitungen(prev => ({ ...prev, [id]: { ...(prev[id] ?? {}), [feld]: wert } }));
+  }
+
+  function istGeaendert(id: string, feld: string): boolean {
+    return feld in (bearbeitungen[id] ?? {});
+  }
+
+  function editKlasse(id: string, feld: string, extra = ''): string {
+    return `bg-transparent focus:outline-none text-sm w-full border-b ${
+      istGeaendert(id, feld) ? 'border-amber-400' : 'border-gray-200 dark:border-gray-600'
+    } focus:border-blue-400 ${extra}`;
+  }
+
+  function editAbbrechen() {
+    setBearbeitungen({});
+    setEditModus(false);
+  }
+
+  async function allesSpeichern() {
+    setSpeichertEdit(true);
+    const eintraege = Object.entries(bearbeitungen).filter(([, f]) => Object.keys(f).length > 0);
+
+    await Promise.all(eintraege.map(async ([id, felder]) => {
+      const pos = positionen.find(p => p.id === id);
+      if (!pos) return;
+      const update: Record<string, unknown> = {};
+      if ('position_nr' in felder) update.position_nr = felder.position_nr || null;
+      if ('beschreibung'  in felder) update.beschreibung = felder.beschreibung;
+      if ('menge'         in felder) update.menge = eingabeZuNum(felder.menge);
+      if ('einheit'       in felder) update.einheit = felder.einheit || null;
+      if ('einzelpreis'   in felder) update.einzelpreis = eingabeZuNum(felder.einzelpreis);
+      if ('gesamtpreis'   in felder) update.gesamtpreis = eingabeZuNum(felder.gesamtpreis) ?? pos.gesamtpreis;
+
+      const neueMenge    = ('menge'       in update ? update.menge       : pos.menge)       as number | null;
+      const neuerEP      = ('einzelpreis' in update ? update.einzelpreis : pos.einzelpreis) as number | null;
+      if (neueMenge != null && neuerEP != null && ('menge' in update || 'einzelpreis' in update)) {
+        update.gesamtpreis = neueMenge * neuerEP;
+      }
+      await supabase.from('positionen').update(update).eq('id', id);
+    }));
+
+    setPositionen(prev => prev.map(p => {
+      const felder = bearbeitungen[p.id];
+      if (!felder || Object.keys(felder).length === 0) return p;
+      const u = { ...p };
+      if ('position_nr'  in felder) u.position_nr  = felder.position_nr || null;
+      if ('beschreibung' in felder) u.beschreibung  = felder.beschreibung;
+      if ('menge'        in felder) u.menge         = eingabeZuNum(felder.menge);
+      if ('einheit'      in felder) u.einheit       = felder.einheit || null;
+      if ('einzelpreis'  in felder) u.einzelpreis   = eingabeZuNum(felder.einzelpreis);
+      if ('gesamtpreis'  in felder) u.gesamtpreis   = eingabeZuNum(felder.gesamtpreis) ?? p.gesamtpreis;
+      const neueMenge = u.menge;
+      const neuerEP   = u.einzelpreis;
+      if (neueMenge != null && neuerEP != null && ('menge' in felder || 'einzelpreis' in felder)) {
+        u.gesamtpreis = neueMenge * neuerEP;
+      }
+      return u;
+    }));
+
+    setBearbeitungen({});
+    setSpeichertEdit(false);
+    setEditModus(false);
+  }
+
+  // --- Ende Edit-Modus ---
 
   function exportGewerkeXml() {
     const sorted = [...new Set(positionen.map(p => p.gewerk))].sort((a, b) => {
@@ -173,6 +257,8 @@ ${zeilen}
     return comparePositionNr(aNr, bNr);
   });
 
+  const anzahlAenderungen = Object.values(bearbeitungen).filter(f => Object.keys(f).length > 0).length;
+
   if (loading) {
     return <div className="text-center py-16 text-gray-500">Lade Daten...</div>;
   }
@@ -202,23 +288,58 @@ ${zeilen}
           <span className="text-gray-400 dark:text-gray-400">({formatDatum(aktuelleVersion.erstellt_am)})</span>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={exportGewerkeXml}
-            className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-gray-400 transition-colors"
-            title="Gewerk-Prüfliste als XML exportieren"
-          >
-            Gewerke exportieren
-          </button>
-          {versionsAnzahl >= 2 && (
-            <Link
-              href="/vergleich"
-              className="text-sm bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors"
-            >
-              Versionen vergleichen
-            </Link>
+          {!editModus ? (
+            <>
+              <button
+                onClick={() => setEditModus(true)}
+                className="text-sm text-amber-600 dark:text-amber-400 hover:text-amber-700 px-3 py-2 rounded-lg border border-amber-300 dark:border-amber-600 hover:border-amber-500 transition-colors"
+              >
+                Bearbeiten
+              </button>
+              <button
+                onClick={exportGewerkeXml}
+                className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-gray-400 transition-colors"
+                title="Gewerk-Prüfliste als XML exportieren"
+              >
+                Gewerke exportieren
+              </button>
+              {versionsAnzahl >= 2 && (
+                <Link
+                  href="/vergleich"
+                  className="text-sm bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors"
+                >
+                  Versionen vergleichen
+                </Link>
+              )}
+            </>
+          ) : (
+            <>
+              <span className="text-xs text-gray-400 dark:text-gray-500 mr-1">
+                {anzahlAenderungen > 0 ? `${anzahlAenderungen} Position${anzahlAenderungen !== 1 ? 'en' : ''} geändert` : 'Keine Änderungen'}
+              </span>
+              <button
+                onClick={editAbbrechen}
+                className="text-sm text-gray-500 dark:text-gray-400 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-gray-400 transition-colors"
+              >
+                Abbrechen
+              </button>
+              <button
+                onClick={allesSpeichern}
+                disabled={speichertEdit || anzahlAenderungen === 0}
+                className="text-sm bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white px-4 py-2 rounded-lg transition-colors"
+              >
+                {speichertEdit ? 'Speichert...' : `Speichern${anzahlAenderungen > 0 ? ` (${anzahlAenderungen})` : ''}`}
+              </button>
+            </>
           )}
         </div>
       </div>
+
+      {editModus && (
+        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg px-4 py-3 mb-4 text-sm text-amber-800 dark:text-amber-300">
+          <strong>Bearbeitungsmodus:</strong> Klicke in ein Feld um es zu ändern. Geänderte Felder werden <span className="border-b border-amber-400">gelb unterstrichen</span>. Speichern schreibt alle Änderungen fest in die Datenbank.
+        </div>
+      )}
 
       <VersionenVerwalten versionen={alleVersionen} onGeloescht={loadDaten} />
 
@@ -253,11 +374,13 @@ ${zeilen}
         </div>
       </div>
 
-      <div className="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-lg px-4 py-3 mb-4 text-sm text-blue-700 dark:text-blue-300">
-        Kreis-Symbol bei einer Position: einzelne <strong>Eigenleistung</strong> markieren. Kreis-Symbol im Gewerk-Header: gesamtes Gewerk markieren/aufheben.
-      </div>
+      {!editModus && (
+        <div className="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-lg px-4 py-3 mb-4 text-sm text-blue-700 dark:text-blue-300">
+          Kreis-Symbol bei einer Position: einzelne <strong>Eigenleistung</strong> markieren. Kreis-Symbol im Gewerk-Header: gesamtes Gewerk markieren/aufheben.
+        </div>
+      )}
 
-      {optionalPositionen.length > 0 && (
+      {optionalPositionen.length > 0 && !editModus && (
         <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg px-4 py-3 mb-6 text-sm text-yellow-800 dark:text-yellow-300">
           <strong>{optionalPositionen.length} optionale Positionen</strong> (Eventual / Alternativ) — nutze den <strong>+</strong>-Button um sie ins Angebot aufzunehmen.
           {eventualSumme > 0 && <span className="ml-2 text-yellow-600 dark:text-yellow-400">Noch nicht aufgenommen: {formatEuro(eventualSumme)}</span>}
@@ -301,7 +424,7 @@ ${zeilen}
                   </span>
                 </div>
                 <div className="flex items-center gap-4 text-sm">
-                  {relevantePositionen.length > 0 && (
+                  {!editModus && relevantePositionen.length > 0 && (
                     <button
                       onClick={(e) => toggleGewerkEigenleistung(gewerk, alleEigenleistung, e)}
                       title={alleEigenleistung ? 'Eigenleistung für Gewerk aufheben' : 'Gesamtes Gewerk als Eigenleistung markieren'}
@@ -331,7 +454,7 @@ ${zeilen}
                         <th className="px-4 py-2 text-left font-medium">Beschreibung</th>
                         <th className="px-4 py-2 text-right font-medium w-28">EP</th>
                         <th className="px-4 py-2 text-right font-medium w-32">GP</th>
-                        <th className="px-4 py-2 text-center font-medium w-32">Aktion</th>
+                        <th className="px-4 py-2 text-center font-medium w-12">Aktion</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
@@ -339,6 +462,50 @@ ${zeilen}
                         if (gruppe.type === 'single') {
                           const p = gruppe.pos;
                           const ersetzt = ersetzteIds.has(p.id);
+                          if (editModus) {
+                            return (
+                              <tr key={p.id} className={`transition-colors ${
+                                Object.keys(bearbeitungen[p.id] ?? {}).length > 0
+                                  ? 'bg-amber-50 dark:bg-amber-900/10'
+                                  : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                              }`}>
+                                <td className="px-4 py-2">
+                                  <input value={editWert(p.id, 'position_nr', p.position_nr ?? '')}
+                                    onChange={e => setEditWert(p.id, 'position_nr', e.target.value)}
+                                    className={editKlasse(p.id, 'position_nr', 'text-xs w-16 text-gray-500 dark:text-gray-400')} />
+                                </td>
+                                <td className="px-4 py-2">
+                                  <div className="flex items-center gap-1">
+                                    <input value={editWert(p.id, 'menge', p.menge != null ? String(p.menge) : '')}
+                                      onChange={e => setEditWert(p.id, 'menge', e.target.value)}
+                                      className={editKlasse(p.id, 'menge', 'w-14 text-right text-gray-600 dark:text-gray-300')}
+                                      placeholder="–" />
+                                    <input value={editWert(p.id, 'einheit', p.einheit ?? '')}
+                                      onChange={e => setEditWert(p.id, 'einheit', e.target.value)}
+                                      className={editKlasse(p.id, 'einheit', 'w-14 text-gray-500 dark:text-gray-400')}
+                                      placeholder="Einh." />
+                                  </div>
+                                </td>
+                                <td className="px-4 py-2">
+                                  <input value={editWert(p.id, 'beschreibung', p.beschreibung)}
+                                    onChange={e => setEditWert(p.id, 'beschreibung', e.target.value)}
+                                    className={editKlasse(p.id, 'beschreibung', 'text-gray-800 dark:text-gray-200')} />
+                                </td>
+                                <td className="px-4 py-2">
+                                  <input value={editWert(p.id, 'einzelpreis', numZuEingabe(p.einzelpreis))}
+                                    onChange={e => setEditWert(p.id, 'einzelpreis', e.target.value)}
+                                    className={editKlasse(p.id, 'einzelpreis', 'text-right text-gray-500 dark:text-gray-400')}
+                                    placeholder="–" />
+                                </td>
+                                <td className="px-4 py-2">
+                                  <input value={editWert(p.id, 'gesamtpreis', numZuEingabe(p.gesamtpreis))}
+                                    onChange={e => setEditWert(p.id, 'gesamtpreis', e.target.value)}
+                                    className={editKlasse(p.id, 'gesamtpreis', 'text-right font-medium text-gray-900 dark:text-white')} />
+                                </td>
+                                <td className="px-4 py-2 text-center text-xs text-gray-300">–</td>
+                              </tr>
+                            );
+                          }
                           return (
                             <tr key={p.id} className={`transition-colors ${
                               p.eigenleistung ? 'bg-green-50 dark:bg-green-900/20' :
@@ -370,6 +537,85 @@ ${zeilen}
                         } else {
                           const { base, alt } = gruppe;
                           const altAktiv = alt.optional_aktiv;
+                          if (editModus) {
+                            return (
+                              <>
+                                <tr key={base.id} className={`border-l-2 border-blue-300 dark:border-blue-600 ${
+                                  Object.keys(bearbeitungen[base.id] ?? {}).length > 0 ? 'bg-amber-50 dark:bg-amber-900/10' : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                                }`}>
+                                  <td className="px-4 py-2">
+                                    <input value={editWert(base.id, 'position_nr', base.position_nr ?? '')}
+                                      onChange={e => setEditWert(base.id, 'position_nr', e.target.value)}
+                                      className={editKlasse(base.id, 'position_nr', 'text-xs w-16 text-gray-500 dark:text-gray-400')} />
+                                  </td>
+                                  <td className="px-4 py-2">
+                                    <div className="flex items-center gap-1">
+                                      <input value={editWert(base.id, 'menge', base.menge != null ? String(base.menge) : '')}
+                                        onChange={e => setEditWert(base.id, 'menge', e.target.value)}
+                                        className={editKlasse(base.id, 'menge', 'w-14 text-right text-gray-600 dark:text-gray-300')} placeholder="–" />
+                                      <input value={editWert(base.id, 'einheit', base.einheit ?? '')}
+                                        onChange={e => setEditWert(base.id, 'einheit', e.target.value)}
+                                        className={editKlasse(base.id, 'einheit', 'w-14 text-gray-500 dark:text-gray-400')} placeholder="Einh." />
+                                    </div>
+                                  </td>
+                                  <td className="px-4 py-2">
+                                    <input value={editWert(base.id, 'beschreibung', base.beschreibung)}
+                                      onChange={e => setEditWert(base.id, 'beschreibung', e.target.value)}
+                                      className={editKlasse(base.id, 'beschreibung', 'text-gray-800 dark:text-gray-200')} />
+                                  </td>
+                                  <td className="px-4 py-2">
+                                    <input value={editWert(base.id, 'einzelpreis', numZuEingabe(base.einzelpreis))}
+                                      onChange={e => setEditWert(base.id, 'einzelpreis', e.target.value)}
+                                      className={editKlasse(base.id, 'einzelpreis', 'text-right text-gray-500 dark:text-gray-400')} placeholder="–" />
+                                  </td>
+                                  <td className="px-4 py-2">
+                                    <input value={editWert(base.id, 'gesamtpreis', numZuEingabe(base.gesamtpreis))}
+                                      onChange={e => setEditWert(base.id, 'gesamtpreis', e.target.value)}
+                                      className={editKlasse(base.id, 'gesamtpreis', 'text-right font-medium text-gray-900 dark:text-white')} />
+                                  </td>
+                                  <td className="px-4 py-2 text-center text-xs text-gray-300">–</td>
+                                </tr>
+                                <tr key={alt.id} className={`border-l-2 border-blue-300 dark:border-blue-600 opacity-50 ${
+                                  Object.keys(bearbeitungen[alt.id] ?? {}).length > 0 ? 'bg-amber-50 dark:bg-amber-900/10' : ''
+                                }`}>
+                                  <td className="px-4 py-2">
+                                    <input value={editWert(alt.id, 'position_nr', alt.position_nr ?? '')}
+                                      onChange={e => setEditWert(alt.id, 'position_nr', e.target.value)}
+                                      className={editKlasse(alt.id, 'position_nr', 'text-xs w-16 text-gray-500 dark:text-gray-400')} />
+                                  </td>
+                                  <td className="px-4 py-2">
+                                    <div className="flex items-center gap-1">
+                                      <input value={editWert(alt.id, 'menge', alt.menge != null ? String(alt.menge) : '')}
+                                        onChange={e => setEditWert(alt.id, 'menge', e.target.value)}
+                                        className={editKlasse(alt.id, 'menge', 'w-14 text-right text-gray-600 dark:text-gray-300')} placeholder="–" />
+                                      <input value={editWert(alt.id, 'einheit', alt.einheit ?? '')}
+                                        onChange={e => setEditWert(alt.id, 'einheit', e.target.value)}
+                                        className={editKlasse(alt.id, 'einheit', 'w-14 text-gray-500 dark:text-gray-400')} placeholder="Einh." />
+                                    </div>
+                                  </td>
+                                  <td className="px-4 py-2">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-xs px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400 font-medium shrink-0">Alt.</span>
+                                      <input value={editWert(alt.id, 'beschreibung', alt.beschreibung)}
+                                        onChange={e => setEditWert(alt.id, 'beschreibung', e.target.value)}
+                                        className={editKlasse(alt.id, 'beschreibung', 'text-gray-800 dark:text-gray-200')} />
+                                    </div>
+                                  </td>
+                                  <td className="px-4 py-2">
+                                    <input value={editWert(alt.id, 'einzelpreis', numZuEingabe(alt.einzelpreis))}
+                                      onChange={e => setEditWert(alt.id, 'einzelpreis', e.target.value)}
+                                      className={editKlasse(alt.id, 'einzelpreis', 'text-right text-gray-500 dark:text-gray-400')} placeholder="–" />
+                                  </td>
+                                  <td className="px-4 py-2">
+                                    <input value={editWert(alt.id, 'gesamtpreis', numZuEingabe(alt.gesamtpreis))}
+                                      onChange={e => setEditWert(alt.id, 'gesamtpreis', e.target.value)}
+                                      className={editKlasse(alt.id, 'gesamtpreis', 'text-right font-medium text-gray-900 dark:text-white')} />
+                                  </td>
+                                  <td className="px-4 py-2 text-center text-xs text-gray-300">–</td>
+                                </tr>
+                              </>
+                            );
+                          }
                           return (
                             <>
                               <tr key={base.id} className={`border-l-2 border-blue-300 dark:border-blue-600 transition-colors ${altAktiv ? 'opacity-30' : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'}`}>
