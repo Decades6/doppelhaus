@@ -19,7 +19,7 @@ const CLOSING_RX  = /^(Summe |Zwischensumme )/i;
 const EINHEIT_LIST = 'm²xWo\\.?|m2xWo\\.?|m³xWo\\.?|m3xWo\\.?|mxWo\\.?|m²|m2|m³|m3|lfdm|lfm|Woch\\.?|Wo\\.?|Stück|Stck\\.?|Stk\\.?|St\\.?|Psch\\.?|psch\\.?|kg|VE|Pkg\\.?|Std\\.?|qm|m';
 const EINHEIT_RX            = new RegExp(`(\\d+(?:[,.]\\d+)?)\\s*(${EINHEIT_LIST})(?=\\s|[A-ZÄÖÜ]|$)`, 'i');
 const EINHEIT_OHNE_MENGE_RX = new RegExp(`^(${EINHEIT_LIST})(?=\\s|$)`, 'i');
-const ZAHL_KLEBT_RX         = /^(\d+(?:[,.]\d+)?)(?=[A-ZÄÖÜ])/;
+const ZAHL_KLEBT_RX         = /^(\d+(?:[,.]\d+)?)-?(?=[A-ZÄÖÜ])/;
 
 // Zeichen/Wörter die anzeigen dass ein Titel auf der nächsten Zeile weitergeht
 const VERBINDUNGSWOERTER = new Set([
