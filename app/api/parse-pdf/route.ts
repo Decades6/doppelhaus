@@ -16,8 +16,10 @@ const GEWERK_RX   = /^(\d+\.\d+\.)([A-ZÄÖÜa-zäöüß].{3,})/;
 const SKIP_RX     = /^(Summe \d|Zwischensumme|Nettosumme|Bruttosumme|zzgl\.|MwSt)/i;
 const CLOSING_RX  = /^(Summe |Zwischensumme )/i;
 
-const EINHEIT_LIST = 'm²xWo\\.?|m2xWo\\.?|m³xWo\\.?|m3xWo\\.?|mxWo\\.?|m²|m2|m³|m3|lfdm|lfm|Woch\\.?|Wo\\.?|Stk\\.?|St\\.?|Psch\\.?|psch\\.?|kg|VE|Pkg\\.?|Std\\.?|qm|m';
-const EINHEIT_RX   = new RegExp(`(\\d+(?:[,.]\\d+)?)\\s*(${EINHEIT_LIST})(?=\\s|[A-ZÄÖÜ]|$)`, 'i');
+const EINHEIT_LIST = 'm²xWo\\.?|m2xWo\\.?|m³xWo\\.?|m3xWo\\.?|mxWo\\.?|m²|m2|m³|m3|lfdm|lfm|Woch\\.?|Wo\\.?|Stück|Stck\\.?|Stk\\.?|St\\.?|Psch\\.?|psch\\.?|kg|VE|Pkg\\.?|Std\\.?|qm|m';
+const EINHEIT_RX            = new RegExp(`(\\d+(?:[,.]\\d+)?)\\s*(${EINHEIT_LIST})(?=\\s|[A-ZÄÖÜ]|$)`, 'i');
+const EINHEIT_OHNE_MENGE_RX = new RegExp(`^(${EINHEIT_LIST})(?=\\s|$)`, 'i');
+const ZAHL_KLEBT_RX         = /^(\d+(?:[,.]\d+)?)(?=[A-ZÄÖÜ])/;
 
 // Zeichen/Wörter die anzeigen dass ein Titel auf der nächsten Zeile weitergeht
 const VERBINDUNGSWOERTER = new Set([
@@ -176,8 +178,12 @@ function parseLeistungsverzeichnis(text: string): { positionen: ParsedPosition[]
     }
 
     // Menge, Einheit und Beschreibung aus der ersten Zeile extrahieren
-    const firstLine = block.lines[0].replace(POS_NR_3_RX, '').replace(POS_NR_2_RX, '').trim();
-    const unitMatch  = firstLine.match(EINHEIT_RX);
+    let firstLine = block.lines[0].replace(POS_NR_3_RX, '').replace(POS_NR_2_RX, '').trim();
+
+    // Strich als Mengen-Platzhalter entfernen (z.B. "- Stück Beschreibung" oder "- Beschreibung")
+    firstLine = firstLine.replace(/^-\s+/, '');
+
+    const unitMatch = firstLine.match(EINHEIT_RX);
     let menge: number | undefined;
     let einheit: string | undefined;
     let descRaw = firstLine;
@@ -186,6 +192,20 @@ function parseLeistungsverzeichnis(text: string): { positionen: ParsedPosition[]
       menge   = parseGermanNumber(unitMatch[1]);
       einheit = unitMatch[2];
       descRaw = firstLine.replace(unitMatch[0], '').trim();
+    } else {
+      // Einheit ohne vorhergehende Menge (z.B. "Stück Beschreibung")
+      const einheitOhneMenge = firstLine.match(EINHEIT_OHNE_MENGE_RX);
+      if (einheitOhneMenge) {
+        einheit = einheitOhneMenge[1];
+        descRaw = firstLine.replace(einheitOhneMenge[0], '').trim();
+      } else {
+        // Zahl klebt direkt an Beschreibung ohne Einheit (z.B. "1,00Rohbau-Ausführungsplanung")
+        const zahlKlebt = firstLine.match(ZAHL_KLEBT_RX);
+        if (zahlKlebt) {
+          menge   = parseGermanNumber(zahlKlebt[1]);
+          descRaw = firstLine.replace(zahlKlebt[0], '').trim();
+        }
+      }
     }
 
     // Mehrzeiligen Titel zusammensetzen
