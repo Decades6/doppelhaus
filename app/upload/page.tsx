@@ -215,7 +215,8 @@ export default function UploadPage() {
   if (schritt === 'upload') {
     return (
       <div className="max-w-2xl mx-auto">
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Angebot hochladen</h1>
+        <a href="/" className="inline-flex items-center gap-1 text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 mb-6 transition-colors">← Dashboard</a>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Angebot hochladen</h1>
         <p className="text-gray-500 mb-8">
           Lade das PDF-Angebot eures Bauträgers hoch. Wir lesen alle Positionen automatisch aus.
         </p>
