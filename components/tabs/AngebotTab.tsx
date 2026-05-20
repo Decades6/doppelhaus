@@ -37,8 +37,15 @@ export default function AngebotTab() {
   const [editModus, setEditModus] = useState(false);
   const [bearbeitungen, setBearbeitungen] = useState<Record<string, Record<string, string>>>({});
   const [speichertEdit, setSpeichertEdit] = useState(false);
+  const [zeigeScrollTop, setZeigeScrollTop] = useState(false);
 
   useEffect(() => { loadDaten(); }, []);
+
+  useEffect(() => {
+    function onScroll() { setZeigeScrollTop(window.scrollY > 400); }
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
   async function loadDaten() {
     const { data: versionen } = await supabase
@@ -679,6 +686,14 @@ ${zeilen}
           );
         })}
       </div>
+
+      {zeigeScrollTop && (
+        <button
+          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+          className="fixed bottom-6 right-6 z-50 w-10 h-10 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg flex items-center justify-center transition-all text-lg"
+          title="Nach oben scrollen"
+        >↑</button>
+      )}
     </div>
   );
 }

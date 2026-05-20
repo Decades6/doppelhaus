@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Position, Version } from '@/lib/types';
+import { EigenleistungMaterial, Position, Version } from '@/lib/types';
 import { formatEuro, comparePositionNr, parseGermanNumber, formatGermanNumber } from '@/lib/utils';
 
 // Anschlüsse bleiben als feste Einzelfelder in kosten_manuell
@@ -67,8 +67,12 @@ export default function KostenTab() {
   const [anschlussEingaben, setAnschlussEingaben] = useState<Record<string, string>>({});
   const [kostenPositionen, setKostenPositionen] = useState<Record<string, KostenPosition[]>>({});
   const [neuForm, setNeuForm] = useState<Record<string, { bezeichnung: string; betrag: string }>>({});
+  const [materialDetails, setMaterialDetails] = useState<Record<string, EigenleistungMaterial[]>>({});
+  const [aufgeklappteGewerke, setAufgeklappteGewerke] = useState<Set<string>>(new Set());
   const [laden, setLaden] = useState(true);
   const [speichern, setSpeichern] = useState(false);
+  const [bearbeitungId, setBearbeitungId] = useState<string | null>(null);
+  const [bearbeitungKategorie, setBearbeitungKategorie] = useState<Kategorie | null>(null);
   const [grundstueckspreisEingabe, setGrundstueckspreisEingabe] = useState('');
   const speicherTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -83,7 +87,7 @@ export default function KostenTab() {
 
       const [{ data: pos }, { data: mat }] = await Promise.all([
         supabase.from('positionen').select('gewerk, position_nr, gesamtpreis').eq('version_id', v.id).eq('eigenleistung', true).eq('nicht_im_angebot', false),
-        supabase.from('eigenleistung_materialien').select('gewerk, gesamtpreis'),
+        supabase.from('eigenleistung_materialien').select('*').order('created_at', { ascending: true }),
       ]);
 
       if (pos) {
@@ -99,9 +103,13 @@ export default function KostenTab() {
 
         if (mat) {
           const matMap = new Map<string, number>();
-          for (const m of mat as { gewerk: string; gesamtpreis: number }[]) {
+          const details: Record<string, EigenleistungMaterial[]> = {};
+          for (const m of mat as EigenleistungMaterial[]) {
             matMap.set(m.gewerk, (matMap.get(m.gewerk) ?? 0) + m.gesamtpreis);
+            if (!details[m.gewerk]) details[m.gewerk] = [];
+            details[m.gewerk].push(m);
           }
+          setMaterialDetails(details);
           setMaterialGewerke(
             [...matMap.entries()]
               .map(([gewerk, material_summe]) => ({ gewerk, gewerk_nr: gwMap.get(gewerk)?.gewerk_nr ?? '', material_summe }))
@@ -155,21 +163,53 @@ export default function KostenTab() {
     }, 800);
   }
 
+  function bearbeitungStarten(pos: KostenPosition) {
+    setBearbeitungId(pos.id);
+    setBearbeitungKategorie(pos.kategorie as Kategorie);
+    setNeuForm(prev => ({
+      ...prev,
+      [pos.kategorie]: { bezeichnung: pos.bezeichnung, betrag: formatGermanNumber(pos.betrag) },
+    }));
+  }
+
+  function bearbeitungAbbrechen() {
+    if (bearbeitungKategorie) setNeuForm(prev => ({ ...prev, [bearbeitungKategorie]: LEER_FORM }));
+    setBearbeitungId(null);
+    setBearbeitungKategorie(null);
+  }
+
   async function positionHinzufuegen(kategorie: Kategorie) {
     const f = neuForm[kategorie] ?? LEER_FORM;
     if (!f.bezeichnung.trim()) return;
     const betrag = parseGermanNumber(f.betrag) ?? 0;
     if (betrag <= 0) return;
 
-    const { data: { user } } = await supabase.auth.getUser();
-    const { data, error } = await supabase
-      .from('kosten_positionen')
-      .insert({ user_id: user?.id, kategorie, bezeichnung: f.bezeichnung.trim(), betrag })
-      .select().single();
+    if (bearbeitungId) {
+      const { data, error } = await supabase
+        .from('kosten_positionen')
+        .update({ bezeichnung: f.bezeichnung.trim(), betrag })
+        .eq('id', bearbeitungId)
+        .select().single();
+      if (!error && data) {
+        setKostenPositionen(prev => ({
+          ...prev,
+          [kategorie]: (prev[kategorie] ?? []).map(p => p.id === bearbeitungId ? data as KostenPosition : p),
+        }));
+        setNeuForm(prev => ({ ...prev, [kategorie]: LEER_FORM }));
+        setBearbeitungId(null);
+        setBearbeitungKategorie(null);
+      }
+    } else {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data, error } = await supabase
+        .from('kosten_positionen')
+        .insert({ user_id: user?.id, kategorie, bezeichnung: f.bezeichnung.trim(), betrag })
+        .select().single();
 
-    if (!error && data) {
-      setKostenPositionen(prev => ({ ...prev, [kategorie]: [...(prev[kategorie] ?? []), data as KostenPosition] }));
-      setNeuForm(prev => ({ ...prev, [kategorie]: LEER_FORM }));
+      if (!error && data) {
+        setKostenPositionen(prev => ({ ...prev, [kategorie]: [...(prev[kategorie] ?? []), data as KostenPosition] }));
+        setNeuForm(prev => ({ ...prev, [kategorie]: LEER_FORM }));
+      }
     }
   }
 
@@ -247,14 +287,37 @@ export default function KostenTab() {
                   </td>
                   <td className="px-6 py-4 text-right font-semibold text-orange-600 dark:text-orange-400">{formatEuro(materialGesamt)}</td>
                 </tr>
-                {materialGewerke.map(g => (
-                  <tr key={g.gewerk}>
-                    <td className="px-6 py-2 pl-10 text-gray-600 dark:text-gray-300">
-                      <span className="text-xs text-gray-400 mr-2 font-mono">{g.gewerk_nr}</span>{g.gewerk}
-                    </td>
-                    <td className="px-6 py-2 text-right text-orange-600 dark:text-orange-400">{formatEuro(g.material_summe)}</td>
-                  </tr>
-                ))}
+                {materialGewerke.map(g => {
+                  const isOffen = aufgeklappteGewerke.has(g.gewerk);
+                  const items = materialDetails[g.gewerk] ?? [];
+                  return (
+                    <Fragment key={g.gewerk}>
+                      <tr
+                        className="cursor-pointer hover:bg-orange-50/50 dark:hover:bg-orange-900/10 print:cursor-auto"
+                        onClick={() => setAufgeklappteGewerke(prev => {
+                          const next = new Set(prev);
+                          isOffen ? next.delete(g.gewerk) : next.add(g.gewerk);
+                          return next;
+                        })}
+                      >
+                        <td className="px-6 py-2 pl-10 text-gray-600 dark:text-gray-300">
+                          <span className="text-gray-300 dark:text-gray-600 mr-2 text-xs print:hidden">{isOffen ? '▼' : '▶'}</span>
+                          <span className="text-xs text-gray-400 mr-2 font-mono">{g.gewerk_nr}</span>{g.gewerk}
+                        </td>
+                        <td className="px-6 py-2 text-right text-orange-600 dark:text-orange-400">{formatEuro(g.material_summe)}</td>
+                      </tr>
+                      {items.map(m => (
+                        <tr key={m.id} className={`${isOffen ? 'table-row' : 'hidden'} print:table-row bg-orange-50/30 dark:bg-orange-900/5`}>
+                          <td className="px-6 py-1 pl-16 text-xs text-gray-500 dark:text-gray-400">
+                            {m.bezeichnung}
+                            {m.menge != null && <span className="ml-1 text-gray-400">{m.menge} {m.einheit ?? ''}</span>}
+                          </td>
+                          <td className="px-6 py-1 text-right text-xs text-orange-500 dark:text-orange-400">{formatEuro(m.gesamtpreis)}</td>
+                        </tr>
+                      ))}
+                    </Fragment>
+                  );
+                })}
               </>
             )}
 
@@ -307,12 +370,14 @@ export default function KostenTab() {
                     </td>
                   </tr>
                   {positionen.map(pos => (
-                    <tr key={pos.id}>
+                    <tr key={pos.id} className={bearbeitungId === pos.id ? 'bg-amber-50 dark:bg-amber-900/20' : ''}>
                       <td className="px-6 py-1.5 pl-10 text-xs text-gray-500 dark:text-gray-400">{pos.bezeichnung}</td>
                       <td className="px-6 py-1.5 text-right text-xs text-gray-600 dark:text-gray-300">
                         {formatEuro(pos.betrag)}
+                        <button onClick={() => bearbeitungStarten(pos)}
+                          className="ml-2 text-gray-300 hover:text-amber-500 transition-colors print:hidden" title="Bearbeiten">✎</button>
                         <button onClick={() => positionLoeschen(pos.id, key)}
-                          className="ml-2 text-gray-300 hover:text-red-400 transition-colors print:hidden">×</button>
+                          className="ml-1 text-gray-300 hover:text-red-400 transition-colors print:hidden">×</button>
                       </td>
                     </tr>
                   ))}
@@ -330,10 +395,16 @@ export default function KostenTab() {
                           placeholder="0,00"
                           className="w-28 text-right text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
                         <span className="text-xs text-gray-400">€</span>
+                        {bearbeitungId && bearbeitungKategorie === key && (
+                          <button onClick={bearbeitungAbbrechen}
+                            className="text-xs text-gray-500 dark:text-gray-400 px-2 py-1 rounded border border-gray-200 dark:border-gray-600 hover:border-gray-400 transition-colors whitespace-nowrap">
+                            Abbrechen
+                          </button>
+                        )}
                         <button onClick={() => positionHinzufuegen(key)}
                           disabled={!form.bezeichnung.trim() || (parseGermanNumber(form.betrag) ?? 0) <= 0}
-                          className="text-xs text-blue-500 hover:text-blue-700 dark:hover:text-blue-400 disabled:text-gray-300 dark:disabled:text-gray-600 disabled:cursor-not-allowed transition-colors whitespace-nowrap">
-                          + Hinzufügen
+                          className={`text-xs disabled:text-gray-300 dark:disabled:text-gray-600 disabled:cursor-not-allowed transition-colors whitespace-nowrap ${bearbeitungId && bearbeitungKategorie === key ? 'text-amber-500 hover:text-amber-700 dark:hover:text-amber-400' : 'text-blue-500 hover:text-blue-700 dark:hover:text-blue-400'}`}>
+                          {bearbeitungId && bearbeitungKategorie === key ? 'Speichern' : '+ Hinzufügen'}
                         </button>
                       </div>
                     </td>
@@ -380,12 +451,14 @@ export default function KostenTab() {
                     </td>
                   </tr>
                   {positionen.map(pos => (
-                    <tr key={pos.id}>
+                    <tr key={pos.id} className={bearbeitungId === pos.id ? 'bg-amber-50 dark:bg-amber-900/20' : ''}>
                       <td className="px-6 py-1.5 pl-10 text-xs text-gray-500 dark:text-gray-400">{pos.bezeichnung}</td>
                       <td className="px-6 py-1.5 text-right text-xs text-gray-600 dark:text-gray-300">
                         {formatEuro(pos.betrag)}
+                        <button onClick={() => bearbeitungStarten(pos)}
+                          className="ml-2 text-gray-300 hover:text-amber-500 transition-colors print:hidden" title="Bearbeiten">✎</button>
                         <button onClick={() => positionLoeschen(pos.id, key)}
-                          className="ml-2 text-gray-300 hover:text-red-400 transition-colors print:hidden">×</button>
+                          className="ml-1 text-gray-300 hover:text-red-400 transition-colors print:hidden">×</button>
                       </td>
                     </tr>
                   ))}
@@ -403,10 +476,16 @@ export default function KostenTab() {
                           placeholder="0,00"
                           className="w-28 text-right text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
                         <span className="text-xs text-gray-400">€</span>
+                        {bearbeitungId && bearbeitungKategorie === key && (
+                          <button onClick={bearbeitungAbbrechen}
+                            className="text-xs text-gray-500 dark:text-gray-400 px-2 py-1 rounded border border-gray-200 dark:border-gray-600 hover:border-gray-400 transition-colors whitespace-nowrap">
+                            Abbrechen
+                          </button>
+                        )}
                         <button onClick={() => positionHinzufuegen(key)}
                           disabled={!form.bezeichnung.trim() || (parseGermanNumber(form.betrag) ?? 0) <= 0}
-                          className="text-xs text-blue-500 hover:text-blue-700 dark:hover:text-blue-400 disabled:text-gray-300 dark:disabled:text-gray-600 disabled:cursor-not-allowed transition-colors whitespace-nowrap">
-                          + Hinzufügen
+                          className={`text-xs disabled:text-gray-300 dark:disabled:text-gray-600 disabled:cursor-not-allowed transition-colors whitespace-nowrap ${bearbeitungId && bearbeitungKategorie === key ? 'text-amber-500 hover:text-amber-700 dark:hover:text-amber-400' : 'text-blue-500 hover:text-blue-700 dark:hover:text-blue-400'}`}>
+                          {bearbeitungId && bearbeitungKategorie === key ? 'Speichern' : '+ Hinzufügen'}
                         </button>
                       </div>
                     </td>

@@ -37,6 +37,7 @@ export default function ZahlungenTab() {
   const [vorlageId, setVorlageId] = useState('');
   const [laden, setLaden] = useState(true);
   const [speichern, setSpeichern] = useState(false);
+  const [bearbeitungId, setBearbeitungId] = useState<string | null>(null);
   const [form, setForm] = useState({
     datum: new Date().toISOString().split('T')[0],
     beschreibung: '',
@@ -73,20 +74,48 @@ export default function ZahlungenTab() {
     }));
   }
 
+  function bearbeitungStarten(z: Zahlung) {
+    setBearbeitungId(z.id);
+    setVorlageId('');
+    setForm({ datum: z.datum, beschreibung: z.beschreibung, kategorie: z.kategorie, betrag: formatGermanNumber(z.betrag) });
+  }
+
+  function bearbeitungAbbrechen() {
+    setBearbeitungId(null);
+    setForm({ datum: new Date().toISOString().split('T')[0], beschreibung: '', kategorie: 'Bauträger', betrag: '' });
+    setVorlageId('');
+  }
+
   async function hinzufuegen() {
     const betrag = parseGermanNumber(form.betrag);
     if (!form.beschreibung.trim() || betrag == null || betrag <= 0) return;
     setSpeichern(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    const { data, error } = await supabase
-      .from('zahlungen')
-      .insert({ user_id: user?.id, datum: form.datum, beschreibung: form.beschreibung.trim(), kategorie: form.kategorie, betrag })
-      .select().single();
-    if (!error && data) {
-      setZahlungen(prev => [data as Zahlung, ...prev].sort((a, b) => b.datum.localeCompare(a.datum)));
-      setForm(prev => ({ ...prev, beschreibung: '', betrag: '' }));
-      setVorlageId('');
+
+    if (bearbeitungId) {
+      const { data, error } = await supabase
+        .from('zahlungen')
+        .update({ datum: form.datum, beschreibung: form.beschreibung.trim(), kategorie: form.kategorie, betrag })
+        .eq('id', bearbeitungId)
+        .select().single();
+      if (!error && data) {
+        setZahlungen(prev => prev.map(z => z.id === bearbeitungId ? data as Zahlung : z).sort((a, b) => b.datum.localeCompare(a.datum)));
+        setBearbeitungId(null);
+        setForm({ datum: new Date().toISOString().split('T')[0], beschreibung: '', kategorie: 'Bauträger', betrag: '' });
+        setVorlageId('');
+      }
+    } else {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data, error } = await supabase
+        .from('zahlungen')
+        .insert({ user_id: user?.id, datum: form.datum, beschreibung: form.beschreibung.trim(), kategorie: form.kategorie, betrag })
+        .select().single();
+      if (!error && data) {
+        setZahlungen(prev => [data as Zahlung, ...prev].sort((a, b) => b.datum.localeCompare(a.datum)));
+        setForm(prev => ({ ...prev, beschreibung: '', betrag: '' }));
+        setVorlageId('');
+      }
     }
+
     setSpeichern(false);
   }
 
@@ -125,7 +154,7 @@ export default function ZahlungenTab() {
 
       {/* Formular */}
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 mb-6">
-        <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-300 mb-4">Neue Zahlung erfassen</h3>
+        <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-300 mb-4">{bearbeitungId ? 'Zahlung bearbeiten' : 'Neue Zahlung erfassen'}</h3>
         {kostenVorlagen.length > 0 && (() => {
           const bezahltNachName = zahlungen.reduce((acc, z) => {
             const key = z.beschreibung.trim().toLowerCase();
@@ -192,9 +221,15 @@ export default function ZahlungenTab() {
               placeholder="10.000,00"
               className="w-32 text-right text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100" />
           </div>
+          {bearbeitungId && (
+            <button onClick={bearbeitungAbbrechen}
+              className="text-sm text-gray-500 dark:text-gray-400 px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-gray-400 transition-colors whitespace-nowrap">
+              Abbrechen
+            </button>
+          )}
           <button onClick={hinzufuegen} disabled={speichern || !form.beschreibung.trim()}
-            className="text-sm bg-blue-600 text-white px-5 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors whitespace-nowrap">
-            {speichern ? '...' : '+ Hinzufügen'}
+            className={`text-sm text-white px-5 py-2 rounded-lg disabled:opacity-50 transition-colors whitespace-nowrap ${bearbeitungId ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-600 hover:bg-blue-700'}`}>
+            {speichern ? '...' : bearbeitungId ? 'Speichern' : '+ Hinzufügen'}
           </button>
         </div>
       </div>
@@ -219,14 +254,15 @@ export default function ZahlungenTab() {
               </thead>
               <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
                 {zahlungen.map(z => (
-                  <tr key={z.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                  <tr key={z.id} className={`hover:bg-gray-50 dark:hover:bg-gray-700/50 ${bearbeitungId === z.id ? 'bg-amber-50 dark:bg-amber-900/20' : ''}`}>
                     <td className="px-5 py-3 text-gray-500 dark:text-gray-400 whitespace-nowrap">{formatDatumDE(z.datum)}</td>
                     <td className="px-5 py-3 text-gray-800 dark:text-gray-200">{z.beschreibung}</td>
                     <td className="px-5 py-3">
                       <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">{z.kategorie || 'Sonstiges'}</span>
                     </td>
                     <td className="px-5 py-3 text-right font-medium text-gray-900 dark:text-white">{formatEuro(z.betrag)}</td>
-                    <td className="px-5 py-3 text-center">
+                    <td className="px-5 py-3 text-center whitespace-nowrap">
+                      <button onClick={() => bearbeitungStarten(z)} className="text-gray-300 hover:text-amber-500 transition-colors mr-1" title="Bearbeiten">✎</button>
                       <button onClick={() => loeschen(z.id)} className="text-gray-300 hover:text-red-400 transition-colors text-lg leading-none">×</button>
                     </td>
                   </tr>

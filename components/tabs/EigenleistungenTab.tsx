@@ -23,6 +23,8 @@ export default function EigenleistungenTab() {
   const [speichernLaden, setSpeichernLaden] = useState<string | null>(null);
   const [laden, setLaden] = useState(true);
   const [loeschenLaden, setLoeschenLaden] = useState<string | null>(null);
+  const [bearbeitungId, setBearbeitungId] = useState<string | null>(null);
+  const [bearbeitungGewerk, setBearbeitungGewerk] = useState<string | null>(null);
 
   useEffect(() => { ladeDaten(); }, []);
 
@@ -60,6 +62,27 @@ export default function EigenleistungenTab() {
     });
   }
 
+  function bearbeitungStarten(gewerk: string, m: EigenleistungMaterial) {
+    setBearbeitungId(m.id);
+    setBearbeitungGewerk(gewerk);
+    setFormulare(prev => ({
+      ...prev,
+      [gewerk]: {
+        bezeichnung: m.bezeichnung,
+        menge: m.menge != null ? String(m.menge).replace('.', ',') : '',
+        einheit: m.einheit ?? 'Stk.',
+        einzelpreis: m.einzelpreis != null ? String(m.einzelpreis).replace('.', ',') : '',
+        gesamtpreis: String(m.gesamtpreis).replace('.', ','),
+      },
+    }));
+  }
+
+  function bearbeitungAbbrechen() {
+    if (bearbeitungGewerk) setFormulare(prev => ({ ...prev, [bearbeitungGewerk]: { ...LEER } }));
+    setBearbeitungId(null);
+    setBearbeitungGewerk(null);
+  }
+
   async function materialHinzufuegen(gewerk: string) {
     const f = formulare[gewerk];
     if (!f?.bezeichnung.trim()) return;
@@ -67,16 +90,35 @@ export default function EigenleistungenTab() {
     if (isNaN(gp) || gp <= 0) return;
 
     setSpeichernLaden(gewerk);
-    const { data: { user } } = await supabase.auth.getUser();
-    const { data, error } = await supabase
-      .from('eigenleistung_materialien')
-      .insert({ user_id: user?.id, gewerk, bezeichnung: f.bezeichnung.trim(), menge: f.menge ? parseFloat(f.menge.replace(',', '.')) : null, einheit: f.einheit || null, einzelpreis: f.einzelpreis ? parseFloat(f.einzelpreis.replace(',', '.')) : null, gesamtpreis: gp })
-      .select().single();
 
-    if (!error && data) {
-      setMaterialien(prev => [...prev, data as EigenleistungMaterial]);
-      setFormulare(prev => ({ ...prev, [gewerk]: { ...LEER } }));
+    if (bearbeitungId) {
+      const update = {
+        bezeichnung: f.bezeichnung.trim(),
+        menge: f.menge ? parseFloat(f.menge.replace(',', '.')) : null,
+        einheit: f.einheit || null,
+        einzelpreis: f.einzelpreis ? parseFloat(f.einzelpreis.replace(',', '.')) : null,
+        gesamtpreis: gp,
+      };
+      const { error } = await supabase.from('eigenleistung_materialien').update(update).eq('id', bearbeitungId);
+      if (!error) {
+        setMaterialien(prev => prev.map(m => m.id === bearbeitungId ? { ...m, ...update } : m));
+        setFormulare(prev => ({ ...prev, [gewerk]: { ...LEER } }));
+        setBearbeitungId(null);
+        setBearbeitungGewerk(null);
+      }
+    } else {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data, error } = await supabase
+        .from('eigenleistung_materialien')
+        .insert({ user_id: user?.id, gewerk, bezeichnung: f.bezeichnung.trim(), menge: f.menge ? parseFloat(f.menge.replace(',', '.')) : null, einheit: f.einheit || null, einzelpreis: f.einzelpreis ? parseFloat(f.einzelpreis.replace(',', '.')) : null, gesamtpreis: gp })
+        .select().single();
+
+      if (!error && data) {
+        setMaterialien(prev => [...prev, data as EigenleistungMaterial]);
+        setFormulare(prev => ({ ...prev, [gewerk]: { ...LEER } }));
+      }
     }
+
     setSpeichernLaden(null);
   }
 
@@ -214,13 +256,14 @@ export default function EigenleistungenTab() {
                           </thead>
                           <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
                             {gwMat.map(m => (
-                              <tr key={m.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                              <tr key={m.id} className={`hover:bg-gray-50 dark:hover:bg-gray-700/50 ${bearbeitungId === m.id ? 'bg-amber-50 dark:bg-amber-900/20' : ''}`}>
                                 <td className="px-4 py-2 text-gray-800 dark:text-gray-200">{m.bezeichnung}</td>
                                 <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-300">{m.menge ?? '–'}</td>
                                 <td className="px-4 py-2 text-gray-500 dark:text-gray-400">{m.einheit ?? '–'}</td>
                                 <td className="px-4 py-2 text-right text-gray-500 dark:text-gray-400">{m.einzelpreis != null ? formatEuro(m.einzelpreis) : '–'}</td>
                                 <td className="px-4 py-2 text-right font-medium text-orange-600 dark:text-orange-400">{formatEuro(m.gesamtpreis)}</td>
-                                <td className="px-4 py-2 text-center">
+                                <td className="px-4 py-2 text-center whitespace-nowrap">
+                                  <button onClick={() => bearbeitungStarten(gewerk, m)} className="text-gray-300 hover:text-amber-500 transition-colors mr-1" title="Bearbeiten">✎</button>
                                   <button onClick={() => materialLoeschen(m.id)} className="text-gray-300 hover:text-red-400 transition-colors text-lg leading-none">×</button>
                                 </td>
                               </tr>
@@ -257,9 +300,15 @@ export default function EigenleistungenTab() {
                         <input value={f.gesamtpreis} onChange={e => formularAendern(gewerk, 'gesamtpreis', e.target.value)} placeholder="250,00"
                           className="w-full text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100" />
                       </div>
+                      {bearbeitungId && bearbeitungGewerk === gewerk && (
+                        <button onClick={bearbeitungAbbrechen}
+                          className="text-sm text-gray-500 dark:text-gray-400 px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-gray-400 transition-colors whitespace-nowrap">
+                          Abbrechen
+                        </button>
+                      )}
                       <button onClick={() => materialHinzufuegen(gewerk)} disabled={speichernLaden === gewerk || !f.bezeichnung.trim()}
-                        className="text-sm bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors whitespace-nowrap">
-                        {speichernLaden === gewerk ? '...' : '+ Hinzufügen'}
+                        className={`text-sm text-white px-4 py-2 rounded-lg disabled:opacity-50 transition-colors whitespace-nowrap ${bearbeitungId && bearbeitungGewerk === gewerk ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-600 hover:bg-blue-700'}`}>
+                        {speichernLaden === gewerk ? '...' : bearbeitungId && bearbeitungGewerk === gewerk ? 'Speichern' : '+ Hinzufügen'}
                       </button>
                     </div>
                   </div>
