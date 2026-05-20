@@ -143,9 +143,9 @@ export default function EigenleistungenTab() {
   const freiEigenleistungen = materialien.filter(m => m.gewerk === '__frei__');
   const regularMaterialien  = materialien.filter(m => m.gewerk !== '__frei__');
 
-  const gesamtErsparnis     = positionen.reduce((s, p) => s + p.gesamtpreis, 0)
-                            + freiEigenleistungen.reduce((s, m) => s + m.gesamtpreis, 0);
-  const gesamtMaterialkosten = regularMaterialien.reduce((s, m) => s + m.gesamtpreis, 0);
+  const gesamtErsparnis      = positionen.reduce((s, p) => s + p.gesamtpreis, 0);
+  const gesamtMaterialkosten = regularMaterialien.reduce((s, m) => s + m.gesamtpreis, 0)
+                             + freiEigenleistungen.reduce((s, m) => s + m.gesamtpreis, 0);
   const nettoErsparnis = gesamtErsparnis - gesamtMaterialkosten;
 
   if (laden) return <div className="text-center py-16 text-gray-500">Lade Daten...</div>;
@@ -177,9 +177,108 @@ export default function EigenleistungenTab() {
 
       {positionen.length === 0 && (
         <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl px-5 py-4 mb-4 text-sm text-amber-800 dark:text-amber-300">
-          Noch keine Angebots-Positionen als Eigenleistung markiert. Gehe zum Tab <strong>Angebot</strong> und markiere Positionen — oder erfasse weiter unten eigene Arbeiten ohne Angebotsbezug.
+          Noch keine Angebots-Positionen als Eigenleistung markiert. Gehe zum Tab <strong>Angebot</strong> und markiere Positionen.
         </div>
       )}
+
+      {/* Freie Eigenleistungen (kein Angebotsbezug) */}
+      {(() => {
+        const f = formulare['__frei__'] ?? { ...LEER };
+        const isOffen = offeneGewerke.has('__frei__');
+        const freiSumme = freiEigenleistungen.reduce((s, m) => s + m.gesamtpreis, 0);
+        return (
+          <div className="mb-4 bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden">
+            <button
+              onClick={() => setOffeneGewerke(prev => { const next = new Set(prev); isOffen ? next.delete('__frei__') : next.add('__frei__'); return next; })}
+              className="w-full bg-gray-50 dark:bg-gray-700 px-6 py-4 flex items-center justify-between hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors text-left"
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-gray-400">{isOffen ? '▼' : '▶'}</span>
+                <h3 className="font-semibold text-gray-800 dark:text-white">Eigenleistungen</h3>
+                <span className="text-xs text-gray-400 bg-gray-200 dark:bg-gray-600 px-2 py-0.5 rounded-full">{freiEigenleistungen.length} Einträge</span>
+              </div>
+              {freiSumme > 0 && (
+                <span className="font-bold text-orange-500 dark:text-orange-400">{formatEuro(freiSumme)}</span>
+              )}
+            </button>
+
+            {isOffen && (
+              <div className="p-6 space-y-4">
+                {freiEigenleistungen.length > 0 && (
+                  <div className="rounded-lg overflow-hidden border border-gray-100 dark:border-gray-600">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-gray-50 dark:bg-gray-700 text-xs text-gray-500 dark:text-gray-400">
+                          <th className="px-4 py-2 text-left font-medium">Bezeichnung</th>
+                          <th className="px-4 py-2 text-right font-medium w-24">Menge</th>
+                          <th className="px-4 py-2 text-left font-medium w-16">Einheit</th>
+                          <th className="px-4 py-2 text-right font-medium w-28">EP</th>
+                          <th className="px-4 py-2 text-right font-medium w-28">GP</th>
+                          <th className="px-4 py-2 w-10"></th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
+                        {freiEigenleistungen.map(m => (
+                          <tr key={m.id} className={`hover:bg-gray-50 dark:hover:bg-gray-700/50 ${bearbeitungId === m.id ? 'bg-amber-50 dark:bg-amber-900/20' : ''}`}>
+                            <td className="px-4 py-2 text-gray-800 dark:text-gray-200">{m.bezeichnung}</td>
+                            <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-300">{m.menge ?? '–'}</td>
+                            <td className="px-4 py-2 text-gray-500 dark:text-gray-400">{m.einheit ?? '–'}</td>
+                            <td className="px-4 py-2 text-right text-gray-500 dark:text-gray-400">{m.einzelpreis != null ? formatEuro(m.einzelpreis) : '–'}</td>
+                            <td className="px-4 py-2 text-right font-medium text-orange-600 dark:text-orange-400">{formatEuro(m.gesamtpreis)}</td>
+                            <td className="px-4 py-2 text-center whitespace-nowrap">
+                              <button onClick={() => bearbeitungStarten('__frei__', m)} className="text-gray-300 hover:text-amber-500 transition-colors mr-1" title="Bearbeiten">✎</button>
+                              <button onClick={() => materialLoeschen(m.id)} className="text-gray-300 hover:text-red-400 transition-colors text-lg leading-none">×</button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                <div className="flex gap-2 items-end flex-wrap">
+                  <div className="flex-1 min-w-40">
+                    <label className="text-xs text-gray-400 mb-1 block">Bezeichnung</label>
+                    <input value={f.bezeichnung} onChange={e => formularAendern('__frei__', 'bezeichnung', e.target.value)} onKeyDown={e => e.key === 'Enter' && materialHinzufuegen('__frei__')}
+                      placeholder="z.B. Malerarbeiten Wohnung 1"
+                      className="w-full text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100" />
+                  </div>
+                  <div className="w-20">
+                    <label className="text-xs text-gray-400 mb-1 block">Menge</label>
+                    <input value={f.menge} onChange={e => formularAendern('__frei__', 'menge', e.target.value)} placeholder="10"
+                      className="w-full text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100" />
+                  </div>
+                  <div className="w-24">
+                    <label className="text-xs text-gray-400 mb-1 block">Einheit</label>
+                    <input value={f.einheit} onChange={e => formularAendern('__frei__', 'einheit', e.target.value)} placeholder="Std."
+                      className="w-full text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100" />
+                  </div>
+                  <div className="w-28">
+                    <label className="text-xs text-gray-400 mb-1 block">Einzelpreis €</label>
+                    <input value={f.einzelpreis} onChange={e => formularAendern('__frei__', 'einzelpreis', e.target.value)} placeholder="25,00"
+                      className="w-full text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100" />
+                  </div>
+                  <div className="w-28">
+                    <label className="text-xs text-gray-400 mb-1 block">Gesamtpreis €</label>
+                    <input value={f.gesamtpreis} onChange={e => formularAendern('__frei__', 'gesamtpreis', e.target.value)} placeholder="250,00"
+                      className="w-full text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100" />
+                  </div>
+                  {bearbeitungId && bearbeitungGewerk === '__frei__' && (
+                    <button onClick={bearbeitungAbbrechen}
+                      className="text-sm text-gray-500 dark:text-gray-400 px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-gray-400 transition-colors whitespace-nowrap">
+                      Abbrechen
+                    </button>
+                  )}
+                  <button onClick={() => materialHinzufuegen('__frei__')} disabled={speichernLaden === '__frei__' || !f.bezeichnung.trim()}
+                    className={`text-sm text-white px-4 py-2 rounded-lg disabled:opacity-50 transition-colors whitespace-nowrap ${bearbeitungId && bearbeitungGewerk === '__frei__' ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-600 hover:bg-blue-700'}`}>
+                    {speichernLaden === '__frei__' ? '...' : bearbeitungId && bearbeitungGewerk === '__frei__' ? 'Speichern' : '+ Hinzufügen'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       <div className="space-y-4">
         {gewerke.map(gewerk => {
@@ -339,88 +438,6 @@ export default function EigenleistungenTab() {
         })}
       </div>
 
-      {/* Freie Eigenleistungen ohne Angebotsbezug */}
-      {(() => {
-        const f = formulare['__frei__'] ?? { ...LEER };
-        const isOffen = offeneGewerke.has('__frei__');
-        const freiSumme = freiEigenleistungen.reduce((s, m) => s + m.gesamtpreis, 0);
-        return (
-          <div className="mt-4 bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden">
-            <button
-              onClick={() => setOffeneGewerke(prev => { const next = new Set(prev); isOffen ? next.delete('__frei__') : next.add('__frei__'); return next; })}
-              className="w-full bg-green-50 dark:bg-green-900/20 px-6 py-4 flex items-center justify-between hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors text-left"
-            >
-              <div className="flex items-center gap-3">
-                <span className="text-gray-400">{isOffen ? '▼' : '▶'}</span>
-                <h3 className="font-semibold text-gray-800 dark:text-white">Weitere Eigenleistungen</h3>
-                <span className="text-xs text-gray-400 bg-gray-200 dark:bg-gray-600 px-2 py-0.5 rounded-full">{freiEigenleistungen.length} Einträge</span>
-              </div>
-              {freiSumme > 0 && (
-                <span className="font-bold text-green-600 dark:text-green-400">{formatEuro(freiSumme)}</span>
-              )}
-            </button>
-
-            {isOffen && (
-              <div className="p-6 space-y-4">
-                <p className="text-xs text-gray-400">Trage hier Eigenleistungen ein, die nicht im Angebot stehen — z.B. eigene Malerarbeiten, Aufräumen, Gartengestaltung etc.</p>
-
-                {freiEigenleistungen.length > 0 && (
-                  <div className="rounded-lg overflow-hidden border border-gray-100 dark:border-gray-600">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="bg-gray-50 dark:bg-gray-700 text-xs text-gray-500 dark:text-gray-400">
-                          <th className="px-4 py-2 text-left font-medium">Bezeichnung</th>
-                          <th className="px-4 py-2 text-right font-medium w-28">Wert (Ersparnis)</th>
-                          <th className="px-4 py-2 w-10"></th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
-                        {freiEigenleistungen.map(m => (
-                          <tr key={m.id} className={`hover:bg-gray-50 dark:hover:bg-gray-700/50 ${bearbeitungId === m.id ? 'bg-amber-50 dark:bg-amber-900/20' : ''}`}>
-                            <td className="px-4 py-2 text-gray-800 dark:text-gray-200">{m.bezeichnung}</td>
-                            <td className="px-4 py-2 text-right font-medium text-green-600 dark:text-green-400">{formatEuro(m.gesamtpreis)}</td>
-                            <td className="px-4 py-2 text-center whitespace-nowrap">
-                              <button onClick={() => bearbeitungStarten('__frei__', m)} className="text-gray-300 hover:text-amber-500 transition-colors mr-1" title="Bearbeiten">✎</button>
-                              <button onClick={() => materialLoeschen(m.id)} className="text-gray-300 hover:text-red-400 transition-colors text-lg leading-none">×</button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-
-                <div className="flex gap-2 items-end flex-wrap">
-                  <div className="flex-1 min-w-48">
-                    <label className="text-xs text-gray-400 mb-1 block">Bezeichnung</label>
-                    <input value={f.bezeichnung} onChange={e => formularAendern('__frei__', 'bezeichnung', e.target.value)}
-                      onKeyDown={e => e.key === 'Enter' && materialHinzufuegen('__frei__')}
-                      placeholder="z.B. Malerarbeiten Wohnung 1"
-                      className="w-full text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100" />
-                  </div>
-                  <div className="w-36">
-                    <label className="text-xs text-gray-400 mb-1 block">Wert (Ersparnis) €</label>
-                    <input value={f.gesamtpreis} onChange={e => formularAendern('__frei__', 'gesamtpreis', e.target.value)}
-                      onKeyDown={e => e.key === 'Enter' && materialHinzufuegen('__frei__')}
-                      placeholder="1.500,00"
-                      className="w-full text-right text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100" />
-                  </div>
-                  {bearbeitungId && bearbeitungGewerk === '__frei__' && (
-                    <button onClick={bearbeitungAbbrechen}
-                      className="text-sm text-gray-500 dark:text-gray-400 px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-gray-400 transition-colors whitespace-nowrap">
-                      Abbrechen
-                    </button>
-                  )}
-                  <button onClick={() => materialHinzufuegen('__frei__')} disabled={speichernLaden === '__frei__' || !f.bezeichnung.trim()}
-                    className={`text-sm text-white px-4 py-2 rounded-lg disabled:opacity-50 transition-colors whitespace-nowrap ${bearbeitungId && bearbeitungGewerk === '__frei__' ? 'bg-amber-500 hover:bg-amber-600' : 'bg-green-600 hover:bg-green-700'}`}>
-                    {speichernLaden === '__frei__' ? '...' : bearbeitungId && bearbeitungGewerk === '__frei__' ? 'Speichern' : '+ Hinzufügen'}
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        );
-      })()}
     </div>
   );
 }
