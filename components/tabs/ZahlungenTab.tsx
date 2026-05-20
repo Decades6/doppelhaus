@@ -77,7 +77,7 @@ export default function ZahlungenTab() {
   function bearbeitungStarten(z: Zahlung) {
     setBearbeitungId(z.id);
     setVorlageId('');
-    setForm({ datum: z.datum, beschreibung: z.beschreibung, kategorie: z.kategorie, betrag: formatGermanNumber(z.betrag) });
+    setForm({ datum: z.datum, beschreibung: z.beschreibung, kategorie: z.kategorie ?? 'Sonstiges', betrag: formatGermanNumber(z.betrag) });
   }
 
   function bearbeitungAbbrechen() {
