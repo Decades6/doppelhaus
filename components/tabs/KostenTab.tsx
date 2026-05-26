@@ -302,7 +302,7 @@ export default function KostenTab() {
                       >
                         <td className="px-6 py-2 pl-10 text-gray-600 dark:text-gray-300">
                           <span className="text-gray-300 dark:text-gray-600 mr-2 text-xs print:hidden">{isOffen ? '▼' : '▶'}</span>
-                          <span className="text-xs text-gray-400 mr-2 font-mono">{g.gewerk_nr}</span>{g.gewerk}
+                          <span className="text-xs text-gray-400 mr-2 font-mono">{g.gewerk_nr}</span>{g.gewerk === '__frei__' ? 'Zusätzliche Eigenleistungen' : g.gewerk}
                         </td>
                         <td className="px-6 py-2 text-right text-orange-600 dark:text-orange-400">{formatEuro(g.material_summe)}</td>
                       </tr>
