@@ -26,6 +26,7 @@ const KOSTEN_ZU_ZAHLUNG: Record<string, string> = {
 };
 
 interface KostenVorlage { id: string; kategorie: string; bezeichnung: string; betrag: number; }
+interface EigenleistungVorlage { id: string; gewerk: string; bezeichnung: string; gesamtpreis: number; }
 
 function formatDatumDE(iso: string): string {
   return new Date(iso + 'T00:00:00').toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -34,6 +35,7 @@ function formatDatumDE(iso: string): string {
 export default function ZahlungenTab() {
   const [zahlungen, setZahlungen] = useState<Zahlung[]>([]);
   const [kostenVorlagen, setKostenVorlagen] = useState<KostenVorlage[]>([]);
+  const [eigenleistungVorlagen, setEigenleistungVorlagen] = useState<EigenleistungVorlage[]>([]);
   const [vorlageId, setVorlageId] = useState('');
   const [laden, setLaden] = useState(true);
   const [speichern, setSpeichern] = useState(false);
@@ -48,30 +50,42 @@ export default function ZahlungenTab() {
   useEffect(() => { ladeZahlungen(); }, []);
 
   async function ladeZahlungen() {
-    const [{ data: z }, { data: v }] = await Promise.all([
+    const [{ data: z }, { data: v }, { data: em }] = await Promise.all([
       supabase.from('zahlungen').select('*').order('datum', { ascending: false }),
       supabase.from('kosten_positionen').select('id, kategorie, bezeichnung, betrag').order('kategorie').order('bezeichnung'),
+      supabase.from('eigenleistung_materialien').select('id, gewerk, bezeichnung, gesamtpreis').order('gewerk').order('bezeichnung'),
     ]);
     if (z) setZahlungen(z as Zahlung[]);
     if (v) setKostenVorlagen(v as KostenVorlage[]);
+    if (em) setEigenleistungVorlagen(em as EigenleistungVorlage[]);
     setLaden(false);
   }
 
-  function vorlageWaehlen(id: string) {
-    setVorlageId(id);
-    if (!id) return;
-    const v = kostenVorlagen.find(v => v.id === id);
-    if (!v) return;
-    const bereitsGezahlt = zahlungen
-      .filter(z => z.beschreibung.trim().toLowerCase() === v.bezeichnung.trim().toLowerCase())
-      .reduce((s, z) => s + z.betrag, 0);
-    const rest = Math.max(v.betrag - bereitsGezahlt, 0);
-    setForm(p => ({
-      ...p,
-      beschreibung: v.bezeichnung,
-      betrag: formatGermanNumber(rest),
-      kategorie: KOSTEN_ZU_ZAHLUNG[v.kategorie] ?? 'Sonstiges',
-    }));
+  function vorlageWaehlen(compositeId: string) {
+    setVorlageId(compositeId);
+    if (!compositeId) return;
+
+    const bezahltFuer = (bezeichnung: string) =>
+      zahlungen
+        .filter(z => z.beschreibung.trim().toLowerCase() === bezeichnung.trim().toLowerCase())
+        .reduce((s, z) => s + z.betrag, 0);
+
+    if (compositeId.startsWith('e_')) {
+      const e = eigenleistungVorlagen.find(e => e.id === compositeId.slice(2));
+      if (!e) return;
+      const rest = Math.max(e.gesamtpreis - bezahltFuer(e.bezeichnung), 0);
+      setForm(p => ({ ...p, beschreibung: e.bezeichnung, betrag: formatGermanNumber(rest), kategorie: 'Material' }));
+    } else {
+      const v = kostenVorlagen.find(v => v.id === compositeId.slice(2));
+      if (!v) return;
+      const rest = Math.max(v.betrag - bezahltFuer(v.bezeichnung), 0);
+      setForm(p => ({
+        ...p,
+        beschreibung: v.bezeichnung,
+        betrag: formatGermanNumber(rest),
+        kategorie: KOSTEN_ZU_ZAHLUNG[v.kategorie] ?? 'Sonstiges',
+      }));
+    }
   }
 
   function bearbeitungStarten(z: Zahlung) {
@@ -126,11 +140,17 @@ export default function ZahlungenTab() {
 
   const gesamtBezahlt = zahlungen.reduce((s, z) => s + z.betrag, 0);
 
-  const planungSummen = kostenVorlagen.reduce((acc, v) => {
-    const kat = KOSTEN_ZU_ZAHLUNG[v.kategorie] ?? 'Sonstiges';
-    acc[kat] = (acc[kat] ?? 0) + v.betrag;
+  const planungSummen = (() => {
+    const acc: Record<string, number> = {};
+    for (const v of kostenVorlagen) {
+      const kat = KOSTEN_ZU_ZAHLUNG[v.kategorie] ?? 'Sonstiges';
+      acc[kat] = (acc[kat] ?? 0) + v.betrag;
+    }
+    for (const e of eigenleistungVorlagen) {
+      acc['Material'] = (acc['Material'] ?? 0) + e.gesamtpreis;
+    }
     return acc;
-  }, {} as Record<string, number>);
+  })();
 
   const nachKategorie = KATEGORIEN.map(k => ({
     kategorie: k,
@@ -155,36 +175,57 @@ export default function ZahlungenTab() {
       {/* Formular */}
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 mb-6">
         <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-300 mb-4">{bearbeitungId ? 'Zahlung bearbeiten' : 'Neue Zahlung erfassen'}</h3>
-        {kostenVorlagen.length > 0 && (() => {
+        {(kostenVorlagen.length > 0 || eigenleistungVorlagen.length > 0) && (() => {
           const bezahltNachName = zahlungen.reduce((acc, z) => {
             const key = z.beschreibung.trim().toLowerCase();
             acc[key] = (acc[key] ?? 0) + z.betrag;
             return acc;
           }, {} as Record<string, number>);
-          const offeneVorlagen = kostenVorlagen
+
+          const offeneKosten = kostenVorlagen
             .map(v => ({ ...v, bezahlt: bezahltNachName[v.bezeichnung.trim().toLowerCase()] ?? 0 }))
             .filter(v => v.bezahlt < v.betrag);
-          const vollBezahlt = kostenVorlagen.length - offeneVorlagen.length;
-          const kategorien = [...new Set(offeneVorlagen.map(v => v.kategorie))];
+          const vollBezahltKosten = kostenVorlagen.length - offeneKosten.length;
+
+          const offeneEigenleistungen = eigenleistungVorlagen
+            .map(e => ({ ...e, bezahlt: bezahltNachName[e.bezeichnung.trim().toLowerCase()] ?? 0 }))
+            .filter(e => e.bezahlt < e.gesamtpreis);
+          const vollBezahltEigen = eigenleistungVorlagen.length - offeneEigenleistungen.length;
+
+          const vollBezahlt = vollBezahltKosten + vollBezahltEigen;
+          const kostenKategorien = [...new Set(offeneKosten.map(v => v.kategorie))];
+          const eigenGewerke = [...new Set(offeneEigenleistungen.map(e => e.gewerk))];
+
           return (
             <div className="mb-4">
               <label className="text-xs text-gray-400 mb-1 block">
-                Schnellauswahl aus Kostenpunkten
+                Schnellauswahl
                 {vollBezahlt > 0 && (
                   <span className="ml-2 text-green-500">{vollBezahlt} vollständig bezahlt</span>
                 )}
               </label>
               <select value={vorlageId} onChange={e => vorlageWaehlen(e.target.value)}
                 className="w-full text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100">
-                <option value="">– Kostenpunkt wählen (optional) –</option>
-                {kategorien.map(kat => (
+                <option value="">– Kostenpunkt oder Eigenleistung wählen –</option>
+                {offeneKosten.length > 0 && kostenKategorien.map(kat => (
                   <optgroup key={kat} label={KOSTEN_KAT_NAMEN[kat] ?? kat}>
-                    {offeneVorlagen.filter(v => v.kategorie === kat).map(v => {
+                    {offeneKosten.filter(v => v.kategorie === kat).map(v => {
                       const rest = v.betrag - v.bezahlt;
-                      const teilbezahlt = v.bezahlt > 0;
                       return (
-                        <option key={v.id} value={v.id}>
-                          {v.bezeichnung} – {teilbezahlt ? `noch ${formatEuro(rest)} offen (von ${formatEuro(v.betrag)})` : formatEuro(v.betrag)}
+                        <option key={v.id} value={`k_${v.id}`}>
+                          {v.bezeichnung} – {v.bezahlt > 0 ? `noch ${formatEuro(rest)} offen (von ${formatEuro(v.betrag)})` : formatEuro(v.betrag)}
+                        </option>
+                      );
+                    })}
+                  </optgroup>
+                ))}
+                {offeneEigenleistungen.length > 0 && eigenGewerke.map(gewerk => (
+                  <optgroup key={gewerk} label={`Eigenleistung · ${gewerk === '__frei__' ? 'Zusätzliche Eigenleistungen' : gewerk}`}>
+                    {offeneEigenleistungen.filter(e => e.gewerk === gewerk).map(e => {
+                      const rest = e.gesamtpreis - e.bezahlt;
+                      return (
+                        <option key={e.id} value={`e_${e.id}`}>
+                          {e.bezeichnung} – {e.bezahlt > 0 ? `noch ${formatEuro(rest)} offen (von ${formatEuro(e.gesamtpreis)})` : formatEuro(e.gesamtpreis)}
                         </option>
                       );
                     })}
