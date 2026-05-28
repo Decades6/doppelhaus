@@ -43,6 +43,7 @@ interface KostenPosition {
   kategorie: string;
   bezeichnung: string;
   betrag: number;
+  menge?: string | null;
 }
 
 interface EigenleistungGewerk {
@@ -58,7 +59,7 @@ interface MaterialGewerk {
 }
 
 
-const LEER_FORM = { bezeichnung: '', betrag: '' };
+const LEER_FORM = { bezeichnung: '', betrag: '', menge: '' };
 
 export default function KostenTab() {
   const [version, setVersion] = useState<Version | null>(null);
@@ -67,7 +68,7 @@ export default function KostenTab() {
   const [anschluesse, setAnschluesse] = useState<AnschlussKosten>(LEER_ANSCHLUESSE);
   const [anschlussEingaben, setAnschlussEingaben] = useState<Record<string, string>>({});
   const [kostenPositionen, setKostenPositionen] = useState<Record<string, KostenPosition[]>>({});
-  const [neuForm, setNeuForm] = useState<Record<string, { bezeichnung: string; betrag: string }>>({});
+  const [neuForm, setNeuForm] = useState<Record<string, { bezeichnung: string; betrag: string; menge: string }>>({});
   const [materialDetails, setMaterialDetails] = useState<Record<string, EigenleistungMaterial[]>>({});
   const [aufgeklappteGewerke, setAufgeklappteGewerke] = useState<Set<string>>(new Set());
   const [laden, setLaden] = useState(true);
@@ -169,7 +170,7 @@ export default function KostenTab() {
     setBearbeitungKategorie(pos.kategorie as Kategorie);
     setNeuForm(prev => ({
       ...prev,
-      [pos.kategorie]: { bezeichnung: pos.bezeichnung, betrag: formatGermanNumber(pos.betrag) },
+      [pos.kategorie]: { bezeichnung: pos.bezeichnung, betrag: formatGermanNumber(pos.betrag), menge: pos.menge ?? '' },
     }));
   }
 
@@ -185,10 +186,12 @@ export default function KostenTab() {
     const betrag = parseGermanNumber(f.betrag) ?? 0;
     if (betrag <= 0) return;
 
+    const menge = f.menge?.trim() || null;
+
     if (bearbeitungId) {
       const { data, error } = await supabase
         .from('kosten_positionen')
-        .update({ bezeichnung: f.bezeichnung.trim(), betrag })
+        .update({ bezeichnung: f.bezeichnung.trim(), betrag, menge })
         .eq('id', bearbeitungId)
         .select().single();
       if (!error && data) {
@@ -204,7 +207,7 @@ export default function KostenTab() {
       const { data: { user } } = await supabase.auth.getUser();
       const { data, error } = await supabase
         .from('kosten_positionen')
-        .insert({ user_id: user?.id, kategorie, bezeichnung: f.bezeichnung.trim(), betrag })
+        .insert({ user_id: user?.id, kategorie, bezeichnung: f.bezeichnung.trim(), betrag, menge })
         .select().single();
 
       if (!error && data) {
@@ -453,7 +456,10 @@ export default function KostenTab() {
                   </tr>
                   {positionen.map(pos => (
                     <tr key={pos.id} className={bearbeitungId === pos.id ? 'bg-amber-50 dark:bg-amber-900/20' : ''}>
-                      <td className="px-6 py-1.5 pl-10 text-xs text-gray-500 dark:text-gray-400">{pos.bezeichnung}</td>
+                      <td className="px-6 py-1.5 pl-10 text-xs text-gray-500 dark:text-gray-400">
+                        {pos.menge && <span className="mr-1.5 text-gray-400">{pos.menge}×</span>}
+                        {pos.bezeichnung}
+                      </td>
                       <td className="px-6 py-1.5 text-right text-xs text-gray-600 dark:text-gray-300">
                         {formatEuro(pos.betrag)}
                         <button onClick={() => bearbeitungStarten(pos)}
@@ -471,6 +477,11 @@ export default function KostenTab() {
                           onKeyDown={e => e.key === 'Enter' && positionHinzufuegen(key)}
                           placeholder="Bezeichnung"
                           className="flex-1 text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
+                        <input type="text" value={form.menge}
+                          onChange={e => setNeuForm(prev => ({ ...prev, [key]: { ...prev[key] ?? LEER_FORM, menge: e.target.value } }))}
+                          onKeyDown={e => e.key === 'Enter' && positionHinzufuegen(key)}
+                          placeholder="Menge"
+                          className="w-20 text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
                         <input type="text" value={form.betrag}
                           onChange={e => setNeuForm(prev => ({ ...prev, [key]: { ...prev[key] ?? LEER_FORM, betrag: e.target.value } }))}
                           onKeyDown={e => e.key === 'Enter' && positionHinzufuegen(key)}
@@ -511,7 +522,10 @@ export default function KostenTab() {
                   </tr>
                   {positionen.map(pos => (
                     <tr key={pos.id} className={bearbeitungId === pos.id ? 'bg-amber-50 dark:bg-amber-900/20' : ''}>
-                      <td className="px-6 py-1.5 pl-10 text-xs text-gray-500 dark:text-gray-400">{pos.bezeichnung}</td>
+                      <td className="px-6 py-1.5 pl-10 text-xs text-gray-500 dark:text-gray-400">
+                        {pos.menge && <span className="mr-1.5 text-gray-400">{pos.menge}×</span>}
+                        {pos.bezeichnung}
+                      </td>
                       <td className="px-6 py-1.5 text-right text-xs text-gray-600 dark:text-gray-300">
                         {formatEuro(pos.betrag)}
                         <button onClick={() => bearbeitungStarten(pos)}
@@ -529,6 +543,11 @@ export default function KostenTab() {
                           onKeyDown={e => e.key === 'Enter' && positionHinzufuegen(key)}
                           placeholder="Bezeichnung"
                           className="flex-1 text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
+                        <input type="text" value={form.menge}
+                          onChange={e => setNeuForm(prev => ({ ...prev, [key]: { ...prev[key] ?? LEER_FORM, menge: e.target.value } }))}
+                          onKeyDown={e => e.key === 'Enter' && positionHinzufuegen(key)}
+                          placeholder="Menge"
+                          className="w-20 text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
                         <input type="text" value={form.betrag}
                           onChange={e => setNeuForm(prev => ({ ...prev, [key]: { ...prev[key] ?? LEER_FORM, betrag: e.target.value } }))}
                           onKeyDown={e => e.key === 'Enter' && positionHinzufuegen(key)}
