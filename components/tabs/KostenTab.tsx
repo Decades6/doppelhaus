@@ -59,7 +59,7 @@ interface MaterialGewerk {
 }
 
 
-const LEER_FORM = { bezeichnung: '', betrag: '', menge: '' };
+const LEER_FORM = { bezeichnung: '', betrag: '', menge: '', einzelpreis: '' };
 
 export default function KostenTab() {
   const [version, setVersion] = useState<Version | null>(null);
@@ -68,7 +68,7 @@ export default function KostenTab() {
   const [anschluesse, setAnschluesse] = useState<AnschlussKosten>(LEER_ANSCHLUESSE);
   const [anschlussEingaben, setAnschlussEingaben] = useState<Record<string, string>>({});
   const [kostenPositionen, setKostenPositionen] = useState<Record<string, KostenPosition[]>>({});
-  const [neuForm, setNeuForm] = useState<Record<string, { bezeichnung: string; betrag: string; menge: string }>>({});
+  const [neuForm, setNeuForm] = useState<Record<string, { bezeichnung: string; betrag: string; menge: string; einzelpreis: string }>>({});
   const [materialDetails, setMaterialDetails] = useState<Record<string, EigenleistungMaterial[]>>({});
   const [aufgeklappteGewerke, setAufgeklappteGewerke] = useState<Set<string>>(new Set());
   const [laden, setLaden] = useState(true);
@@ -168,10 +168,30 @@ export default function KostenTab() {
   function bearbeitungStarten(pos: KostenPosition) {
     setBearbeitungId(pos.id);
     setBearbeitungKategorie(pos.kategorie as Kategorie);
+    const menge = pos.menge ?? '';
+    const mengeNum = parseFloat(menge.replace(',', '.'));
+    const einzelpreis = (pos.kategorie === 'maschinen' || pos.kategorie === 'sonstiges') && !isNaN(mengeNum) && mengeNum > 0
+      ? formatGermanNumber(pos.betrag / mengeNum)
+      : '';
     setNeuForm(prev => ({
       ...prev,
-      [pos.kategorie]: { bezeichnung: pos.bezeichnung, betrag: formatGermanNumber(pos.betrag), menge: pos.menge ?? '' },
+      [pos.kategorie]: { bezeichnung: pos.bezeichnung, betrag: formatGermanNumber(pos.betrag), menge, einzelpreis },
     }));
+  }
+
+  function mengeEpAendern(key: string, feld: 'menge' | 'einzelpreis', wert: string) {
+    setNeuForm(prev => {
+      const aktuell = prev[key] ?? LEER_FORM;
+      const neu = { ...aktuell, [feld]: wert };
+      const m = parseFloat((feld === 'menge' ? wert : neu.menge).replace(',', '.'));
+      const ep = parseFloat((feld === 'einzelpreis' ? wert : neu.einzelpreis).replace(',', '.'));
+      if (!isNaN(m) && m > 0 && !isNaN(ep) && ep > 0) {
+        neu.betrag = (m * ep).toFixed(2).replace('.', ',');
+      } else if (!isNaN(ep) && ep > 0) {
+        neu.betrag = feld === 'einzelpreis' ? wert : neu.einzelpreis;
+      }
+      return { ...prev, [key]: neu };
+    });
   }
 
   function bearbeitungAbbrechen() {
@@ -342,13 +362,13 @@ export default function KostenTab() {
                   {grundstueckspreis > 0 && (
                     <div className="flex items-center gap-2 flex-wrap">
                       <button
-                        onClick={() => setNeuForm(prev => ({ ...prev, nebenkosten: { bezeichnung: 'Grunderwerbsteuer (5,5 %)', betrag: formatGermanNumber(vorschlagNebenkosten), menge: '' } }))}
+                        onClick={() => setNeuForm(prev => ({ ...prev, nebenkosten: { bezeichnung: 'Grunderwerbsteuer (5,5 %)', betrag: formatGermanNumber(vorschlagNebenkosten), menge: '', einzelpreis: '' } }))}
                         className="text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 px-3 py-1 rounded-full hover:bg-amber-200 transition-colors"
                         title="Grunderwerbsteuer Hamburg: 5,5 % vom Grundstückspreis">
                         Nebenkosten {formatEuro(vorschlagNebenkosten)} vorschlagen
                       </button>
                       <button
-                        onClick={() => setNeuForm(prev => ({ ...prev, notar: { bezeichnung: 'Notar & Grundbuch (1,5 %)', betrag: formatGermanNumber(vorschlagNotar), menge: '' } }))}
+                        onClick={() => setNeuForm(prev => ({ ...prev, notar: { bezeichnung: 'Notar & Grundbuch (1,5 %)', betrag: formatGermanNumber(vorschlagNotar), menge: '', einzelpreis: '' } }))}
                         className="text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 px-3 py-1 rounded-full hover:bg-amber-200 transition-colors"
                         title="Notar + Grundbuch: 1,5 % von Grundstück + Baukosten">
                         Notar {formatEuro(vorschlagNotar)} vorschlagen
@@ -471,23 +491,25 @@ export default function KostenTab() {
                   ))}
                   <tr className="print:hidden">
                     <td colSpan={2} className="px-6 pb-3 pl-10">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <input type="text" value={form.bezeichnung}
                           onChange={e => setNeuForm(prev => ({ ...prev, [key]: { ...prev[key] ?? LEER_FORM, bezeichnung: e.target.value } }))}
                           onKeyDown={e => e.key === 'Enter' && positionHinzufuegen(key)}
                           placeholder="Bezeichnung"
-                          className="flex-1 text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
+                          className="flex-1 min-w-40 text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
                         <input type="text" value={form.menge}
-                          onChange={e => setNeuForm(prev => ({ ...prev, [key]: { ...prev[key] ?? LEER_FORM, menge: e.target.value } }))}
+                          onChange={e => mengeEpAendern(key, 'menge', e.target.value)}
                           onKeyDown={e => e.key === 'Enter' && positionHinzufuegen(key)}
                           placeholder="Menge"
-                          className="w-20 text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
-                        <input type="text" value={form.betrag}
-                          onChange={e => setNeuForm(prev => ({ ...prev, [key]: { ...prev[key] ?? LEER_FORM, betrag: e.target.value } }))}
+                          className="w-16 text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
+                        <span className="text-xs text-gray-400">×</span>
+                        <input type="text" value={form.einzelpreis}
+                          onChange={e => mengeEpAendern(key, 'einzelpreis', e.target.value)}
                           onKeyDown={e => e.key === 'Enter' && positionHinzufuegen(key)}
-                          placeholder="0,00"
-                          className="w-28 text-right text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
+                          placeholder="EP"
+                          className="w-24 text-right text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
                         <span className="text-xs text-gray-400">€</span>
+                        {form.betrag && <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">= {form.betrag} €</span>}
                         {bearbeitungId && bearbeitungKategorie === key && (
                           <button onClick={bearbeitungAbbrechen}
                             className="text-xs text-gray-500 dark:text-gray-400 px-2 py-1 rounded border border-gray-200 dark:border-gray-600 hover:border-gray-400 transition-colors whitespace-nowrap">
@@ -537,23 +559,25 @@ export default function KostenTab() {
                   ))}
                   <tr className="print:hidden">
                     <td colSpan={2} className="px-6 pb-3 pl-10">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <input type="text" value={form.bezeichnung}
                           onChange={e => setNeuForm(prev => ({ ...prev, [key]: { ...prev[key] ?? LEER_FORM, bezeichnung: e.target.value } }))}
                           onKeyDown={e => e.key === 'Enter' && positionHinzufuegen(key)}
                           placeholder="Bezeichnung"
-                          className="flex-1 text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
+                          className="flex-1 min-w-40 text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
                         <input type="text" value={form.menge}
-                          onChange={e => setNeuForm(prev => ({ ...prev, [key]: { ...prev[key] ?? LEER_FORM, menge: e.target.value } }))}
+                          onChange={e => mengeEpAendern(key, 'menge', e.target.value)}
                           onKeyDown={e => e.key === 'Enter' && positionHinzufuegen(key)}
                           placeholder="Menge"
-                          className="w-20 text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
-                        <input type="text" value={form.betrag}
-                          onChange={e => setNeuForm(prev => ({ ...prev, [key]: { ...prev[key] ?? LEER_FORM, betrag: e.target.value } }))}
+                          className="w-16 text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
+                        <span className="text-xs text-gray-400">×</span>
+                        <input type="text" value={form.einzelpreis}
+                          onChange={e => mengeEpAendern(key, 'einzelpreis', e.target.value)}
                           onKeyDown={e => e.key === 'Enter' && positionHinzufuegen(key)}
-                          placeholder="0,00"
-                          className="w-28 text-right text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
+                          placeholder="EP"
+                          className="w-24 text-right text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
                         <span className="text-xs text-gray-400">€</span>
+                        {form.betrag && <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">= {form.betrag} €</span>}
                         {bearbeitungId && bearbeitungKategorie === key && (
                           <button onClick={bearbeitungAbbrechen}
                             className="text-xs text-gray-500 dark:text-gray-400 px-2 py-1 rounded border border-gray-200 dark:border-gray-600 hover:border-gray-400 transition-colors whitespace-nowrap">
