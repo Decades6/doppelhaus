@@ -123,7 +123,7 @@ export default function KostenTab() {
 
     const [{ data: anschlussRows }, { data: positionen }] = await Promise.all([
       supabase.from('kosten_manuell').select('schluessel, betrag'),
-      supabase.from('kosten_positionen').select('id, kategorie, bezeichnung, betrag').order('created_at', { ascending: true }),
+      supabase.from('kosten_positionen').select('id, kategorie, bezeichnung, betrag, menge').order('created_at', { ascending: true }),
     ]);
 
     if (anschlussRows) {
@@ -209,19 +209,22 @@ export default function KostenTab() {
     const menge = f.menge?.trim() || null;
 
     if (bearbeitungId) {
+      const idZuAktualisieren = bearbeitungId;
+      setBearbeitungId(null);
+      setBearbeitungKategorie(null);
+      setNeuForm(prev => ({ ...prev, [kategorie]: LEER_FORM }));
       const { data, error } = await supabase
         .from('kosten_positionen')
         .update({ bezeichnung: f.bezeichnung.trim(), betrag, menge })
-        .eq('id', bearbeitungId)
-        .select().single();
+        .eq('id', idZuAktualisieren)
+        .select('id, kategorie, bezeichnung, betrag, menge').single();
       if (!error && data) {
         setKostenPositionen(prev => ({
           ...prev,
-          [kategorie]: (prev[kategorie] ?? []).map(p => p.id === bearbeitungId ? data as KostenPosition : p),
+          [kategorie]: (prev[kategorie] ?? []).map(p => p.id === idZuAktualisieren ? data as KostenPosition : p),
         }));
-        setNeuForm(prev => ({ ...prev, [kategorie]: LEER_FORM }));
-        setBearbeitungId(null);
-        setBearbeitungKategorie(null);
+      } else if (error) {
+        console.error('Kosten speichern fehlgeschlagen:', error.message);
       }
     } else {
       const { data: { user } } = await supabase.auth.getUser();
