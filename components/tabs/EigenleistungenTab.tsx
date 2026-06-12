@@ -11,9 +11,10 @@ interface NeuesFormular {
   einheit: string;
   einzelpreis: string;
   gesamtpreis: string;
+  zeitaufwand_stunden: string;
 }
 
-const LEER: NeuesFormular = { bezeichnung: '', menge: '', einheit: 'Stk.', einzelpreis: '', gesamtpreis: '' };
+const LEER: NeuesFormular = { bezeichnung: '', menge: '', einheit: 'Stk.', einzelpreis: '', gesamtpreis: '', zeitaufwand_stunden: '' };
 
 export default function EigenleistungenTab() {
   const [positionen, setPositionen] = useState<Position[]>([]);
@@ -73,6 +74,7 @@ export default function EigenleistungenTab() {
         einheit: m.einheit ?? 'Stk.',
         einzelpreis: m.einzelpreis != null ? String(m.einzelpreis).replace('.', ',') : '',
         gesamtpreis: String(m.gesamtpreis).replace('.', ','),
+        zeitaufwand_stunden: m.zeitaufwand_stunden != null ? String(m.zeitaufwand_stunden).replace('.', ',') : '',
       },
     }));
   }
@@ -91,6 +93,8 @@ export default function EigenleistungenTab() {
 
     setSpeichernLaden(gewerk);
 
+    const zeitaufwand = f.zeitaufwand_stunden ? parseFloat(f.zeitaufwand_stunden.replace(',', '.')) : null;
+
     if (bearbeitungId) {
       const update = {
         bezeichnung: f.bezeichnung.trim(),
@@ -98,6 +102,7 @@ export default function EigenleistungenTab() {
         einheit: f.einheit || null,
         einzelpreis: f.einzelpreis ? parseFloat(f.einzelpreis.replace(',', '.')) : null,
         gesamtpreis: gp,
+        zeitaufwand_stunden: zeitaufwand && !isNaN(zeitaufwand) ? zeitaufwand : null,
       };
       const { error } = await supabase.from('eigenleistung_materialien').update(update).eq('id', bearbeitungId);
       if (!error) {
@@ -110,7 +115,7 @@ export default function EigenleistungenTab() {
       const { data: { user } } = await supabase.auth.getUser();
       const { data, error } = await supabase
         .from('eigenleistung_materialien')
-        .insert({ user_id: user?.id, gewerk, bezeichnung: f.bezeichnung.trim(), menge: f.menge ? parseFloat(f.menge.replace(',', '.')) : null, einheit: f.einheit || null, einzelpreis: f.einzelpreis ? parseFloat(f.einzelpreis.replace(',', '.')) : null, gesamtpreis: gp })
+        .insert({ user_id: user?.id, gewerk, bezeichnung: f.bezeichnung.trim(), menge: f.menge ? parseFloat(f.menge.replace(',', '.')) : null, einheit: f.einheit || null, einzelpreis: f.einzelpreis ? parseFloat(f.einzelpreis.replace(',', '.')) : null, gesamtpreis: gp, zeitaufwand_stunden: zeitaufwand && !isNaN(zeitaufwand) ? zeitaufwand : null })
         .select().single();
 
       if (!error && data) {
@@ -147,6 +152,7 @@ export default function EigenleistungenTab() {
   const gesamtMaterialkosten = regularMaterialien.reduce((s, m) => s + m.gesamtpreis, 0)
                              + freiEigenleistungen.reduce((s, m) => s + m.gesamtpreis, 0);
   const nettoErsparnis = gesamtErsparnis - gesamtMaterialkosten;
+  const gesamtStunden = materialien.reduce((s, m) => s + (m.zeitaufwand_stunden ?? 0), 0);
 
   if (laden) return <div className="text-center py-16 text-gray-500">Lade Daten...</div>;
 
@@ -157,7 +163,7 @@ export default function EigenleistungenTab() {
         <h2 className="text-xl font-bold text-gray-900 dark:text-white">Eigenleistungs-Planer</h2>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-8">
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 border-l-4 border-green-500">
           <div className="text-sm text-gray-500 dark:text-gray-400 mb-1">Ersparnis vom Bauträger</div>
           <div className="text-2xl font-bold text-green-600 dark:text-green-400">{formatEuro(gesamtErsparnis)}</div>
@@ -172,6 +178,11 @@ export default function EigenleistungenTab() {
           <div className="text-sm text-gray-500 dark:text-gray-400 mb-1">Netto-Ersparnis</div>
           <div className={`text-2xl font-bold ${nettoErsparnis >= 0 ? 'text-blue-600 dark:text-blue-400' : 'text-red-600 dark:text-red-400'}`}>{formatEuro(nettoErsparnis)}</div>
           <div className="text-xs text-gray-400 mt-1">Bauträger − Materialien</div>
+        </div>
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 border-l-4 border-purple-500">
+          <div className="text-sm text-gray-500 dark:text-gray-400 mb-1">Zeitaufwand gesamt</div>
+          <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">{gesamtStunden > 0 ? `${gesamtStunden.toLocaleString('de-DE')} Std.` : '–'}</div>
+          <div className="text-xs text-gray-400 mt-1">{gesamtStunden > 0 ? `≈ ${(gesamtStunden / 8).toFixed(1).replace('.', ',')} Arbeitstage` : 'Noch keine Angaben'}</div>
         </div>
       </div>
 
@@ -212,6 +223,7 @@ export default function EigenleistungenTab() {
                           <th className="px-4 py-2 text-left font-medium">Bezeichnung</th>
                           <th className="px-4 py-2 text-right font-medium w-24">Menge</th>
                           <th className="px-4 py-2 text-left font-medium w-16">Einheit</th>
+                          <th className="px-4 py-2 text-right font-medium w-24">Std.</th>
                           <th className="px-4 py-2 text-right font-medium w-28">EP</th>
                           <th className="px-4 py-2 text-right font-medium w-28">GP</th>
                           <th className="px-4 py-2 w-10"></th>
@@ -223,6 +235,7 @@ export default function EigenleistungenTab() {
                             <td className="px-4 py-2 text-gray-800 dark:text-gray-200">{m.bezeichnung}</td>
                             <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-300">{m.menge ?? '–'}</td>
                             <td className="px-4 py-2 text-gray-500 dark:text-gray-400">{m.einheit ?? '–'}</td>
+                            <td className="px-4 py-2 text-right text-purple-600 dark:text-purple-400">{m.zeitaufwand_stunden != null ? `${m.zeitaufwand_stunden} h` : '–'}</td>
                             <td className="px-4 py-2 text-right text-gray-500 dark:text-gray-400">{m.einzelpreis != null ? formatEuro(m.einzelpreis) : '–'}</td>
                             <td className="px-4 py-2 text-right font-medium text-orange-600 dark:text-orange-400">{formatEuro(m.gesamtpreis)}</td>
                             <td className="px-4 py-2 text-center whitespace-nowrap">
@@ -252,6 +265,11 @@ export default function EigenleistungenTab() {
                     <label className="text-xs text-gray-400 mb-1 block">Einheit</label>
                     <input value={f.einheit} onChange={e => formularAendern('__frei__', 'einheit', e.target.value)} placeholder="Std."
                       className="w-full text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100" />
+                  </div>
+                  <div className="w-24">
+                    <label className="text-xs text-gray-400 mb-1 block">Zeitaufwand (h)</label>
+                    <input value={f.zeitaufwand_stunden} onChange={e => formularAendern('__frei__', 'zeitaufwand_stunden', e.target.value)} placeholder="8"
+                      className="w-full text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-purple-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100" />
                   </div>
                   <div className="w-28">
                     <label className="text-xs text-gray-400 mb-1 block">Einzelpreis €</label>
@@ -349,6 +367,7 @@ export default function EigenleistungenTab() {
                               <th className="px-4 py-2 text-left font-medium">Bezeichnung</th>
                               <th className="px-4 py-2 text-right font-medium w-24">Menge</th>
                               <th className="px-4 py-2 text-left font-medium w-16">Einheit</th>
+                              <th className="px-4 py-2 text-right font-medium w-24">Std.</th>
                               <th className="px-4 py-2 text-right font-medium w-28">EP</th>
                               <th className="px-4 py-2 text-right font-medium w-28">GP</th>
                               <th className="px-4 py-2 w-10"></th>
@@ -360,6 +379,7 @@ export default function EigenleistungenTab() {
                                 <td className="px-4 py-2 text-gray-800 dark:text-gray-200">{m.bezeichnung}</td>
                                 <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-300">{m.menge ?? '–'}</td>
                                 <td className="px-4 py-2 text-gray-500 dark:text-gray-400">{m.einheit ?? '–'}</td>
+                                <td className="px-4 py-2 text-right text-purple-600 dark:text-purple-400">{m.zeitaufwand_stunden != null ? `${m.zeitaufwand_stunden} h` : '–'}</td>
                                 <td className="px-4 py-2 text-right text-gray-500 dark:text-gray-400">{m.einzelpreis != null ? formatEuro(m.einzelpreis) : '–'}</td>
                                 <td className="px-4 py-2 text-right font-medium text-orange-600 dark:text-orange-400">{formatEuro(m.gesamtpreis)}</td>
                                 <td className="px-4 py-2 text-center whitespace-nowrap">
@@ -389,6 +409,11 @@ export default function EigenleistungenTab() {
                         <label className="text-xs text-gray-400 mb-1 block">Einheit</label>
                         <input value={f.einheit} onChange={e => formularAendern(gewerk, 'einheit', e.target.value)} placeholder="m²"
                           className="w-full text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100" />
+                      </div>
+                      <div className="w-24">
+                        <label className="text-xs text-gray-400 mb-1 block">Zeitaufwand (h)</label>
+                        <input value={f.zeitaufwand_stunden} onChange={e => formularAendern(gewerk, 'zeitaufwand_stunden', e.target.value)} placeholder="8"
+                          className="w-full text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-purple-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100" />
                       </div>
                       <div className="w-28">
                         <label className="text-xs text-gray-400 mb-1 block">Einzelpreis €</label>

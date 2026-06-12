@@ -32,6 +32,7 @@ export interface EigenleistungMaterial {
   einheit: string | null;
   einzelpreis: number | null;
   gesamtpreis: number;
+  zeitaufwand_stunden: number | null;
   created_at: string;
 }
 
