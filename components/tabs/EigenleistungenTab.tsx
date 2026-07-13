@@ -145,8 +145,9 @@ export default function EigenleistungenTab() {
     return comparePositionNr(aNr, bNr);
   });
 
-  const freiEigenleistungen = materialien.filter(m => m.gewerk === '__frei__');
-  const regularMaterialien  = materialien.filter(m => m.gewerk !== '__frei__');
+  const aktiveGewerkeSet = new Set(gewerke);
+  const freiEigenleistungen = materialien.filter(m => m.gewerk === '__frei__' || !aktiveGewerkeSet.has(m.gewerk));
+  const regularMaterialien  = materialien.filter(m => m.gewerk !== '__frei__' && aktiveGewerkeSet.has(m.gewerk));
 
   const gesamtErsparnis      = positionen.reduce((s, p) => s + p.gesamtpreis, 0);
   const gesamtMaterialkosten = regularMaterialien.reduce((s, m) => s + m.gesamtpreis, 0)
