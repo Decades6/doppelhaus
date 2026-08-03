@@ -253,6 +253,7 @@ export default function KostenTab() {
   const materialGesamt = materialGewerke.reduce((s, g) => s + g.material_summe, 0);
   const anschluesseGesamt = Object.values(anschluesse).reduce((s, v) => s + v, 0);
   const positionenGesamt = Object.values(kostenPositionen).flat().reduce((s, p) => s + p.betrag, 0);
+  const gesamtStunden = Object.values(materialDetails).flat().reduce((s, m) => s + (m.zeitaufwand_stunden ?? 0), 0);
   const manuelleGesamt = anschluesseGesamt + positionenGesamt;
   const gesamtFinanzierung = brutto + materialGesamt + manuelleGesamt;
 
@@ -311,12 +312,14 @@ export default function KostenTab() {
                   <td className="px-6 py-4 font-semibold text-gray-800 dark:text-white">
                     Eigenleistung Materialkosten
                     <span className="ml-2 text-xs font-normal text-gray-400">(eigene Materialien)</span>
+                    {gesamtStunden > 0 && <span className="ml-3 text-xs font-normal text-purple-500 dark:text-purple-400">{gesamtStunden.toLocaleString('de-DE')} Std. gesamt</span>}
                   </td>
                   <td className="px-6 py-4 text-right font-semibold text-orange-600 dark:text-orange-400">{formatEuro(materialGesamt)}</td>
                 </tr>
                 {materialGewerke.map(g => {
                   const isOffen = aufgeklappteGewerke.has(g.gewerk);
                   const items = materialDetails[g.gewerk] ?? [];
+                  const gwStunden = items.reduce((s, m) => s + (m.zeitaufwand_stunden ?? 0), 0);
                   return (
                     <Fragment key={g.gewerk}>
                       <tr
@@ -330,6 +333,7 @@ export default function KostenTab() {
                         <td className="px-6 py-2 pl-10 text-gray-600 dark:text-gray-300">
                           <span className="text-gray-300 dark:text-gray-600 mr-2 text-xs print:hidden">{isOffen ? '▼' : '▶'}</span>
                           <span className="text-xs text-gray-400 mr-2 font-mono">{g.gewerk_nr}</span>{g.gewerk === '__frei__' ? 'Zusätzliche Eigenleistungen' : g.gewerk}
+                          {gwStunden > 0 && <span className="ml-2 text-xs text-purple-400">{gwStunden.toLocaleString('de-DE')} Std.</span>}
                         </td>
                         <td className="px-6 py-2 text-right text-orange-600 dark:text-orange-400">{formatEuro(g.material_summe)}</td>
                       </tr>
@@ -338,6 +342,7 @@ export default function KostenTab() {
                           <td className="px-6 py-1 pl-16 text-xs text-gray-500 dark:text-gray-400">
                             {m.bezeichnung}
                             {m.menge != null && <span className="ml-1 text-gray-400">{m.menge} {m.einheit ?? ''}</span>}
+                            {m.zeitaufwand_stunden != null && <span className="ml-2 text-purple-400">{m.zeitaufwand_stunden} h</span>}
                           </td>
                           <td className="px-6 py-1 text-right text-xs text-orange-500 dark:text-orange-400">{formatEuro(m.gesamtpreis)}</td>
                         </tr>
