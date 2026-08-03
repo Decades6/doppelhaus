@@ -89,7 +89,7 @@ export default function EigenleistungenTab() {
     const f = formulare[gewerk];
     if (!f?.bezeichnung.trim()) return;
     const gp = parseFloat(f.gesamtpreis.replace(',', '.'));
-    if (isNaN(gp) || gp <= 0) return;
+    if (isNaN(gp) || gp < 0) return;
 
     setSpeichernLaden(gewerk);
 
