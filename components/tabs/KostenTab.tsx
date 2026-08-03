@@ -315,8 +315,8 @@ export default function KostenTab() {
                   </td>
                   <td className="px-6 py-4 text-right font-semibold text-orange-600 dark:text-orange-400">
                     <div className="flex items-baseline justify-end">
-                      <span className="w-24 text-right text-xs font-normal text-purple-500 dark:text-purple-400 mr-4">{gesamtStunden > 0 ? `${gesamtStunden.toLocaleString('de-DE')} Std.` : ''}</span>
-                      {formatEuro(materialGesamt)}
+                      <span className="w-20 text-right text-xs font-normal text-purple-500 dark:text-purple-400 mr-3">{gesamtStunden > 0 ? `${gesamtStunden.toLocaleString('de-DE')} Std.` : ''}</span>
+                      <span className="w-32 text-right">{formatEuro(materialGesamt)}</span>
                     </div>
                   </td>
                 </tr>
@@ -340,8 +340,8 @@ export default function KostenTab() {
                         </td>
                         <td className="px-6 py-2 text-right text-orange-600 dark:text-orange-400">
                           <div className="flex items-baseline justify-end">
-                            <span className="w-24 text-right text-xs text-purple-400 mr-4">{gwStunden > 0 ? `${gwStunden.toLocaleString('de-DE')} Std.` : ''}</span>
-                            {formatEuro(g.material_summe)}
+                            <span className="w-20 text-right text-xs text-purple-400 mr-3">{gwStunden > 0 ? `${gwStunden.toLocaleString('de-DE')} Std.` : ''}</span>
+                            <span className="w-32 text-right">{formatEuro(g.material_summe)}</span>
                           </div>
                         </td>
                       </tr>
@@ -353,8 +353,8 @@ export default function KostenTab() {
                           </td>
                           <td className="px-6 py-1 text-right text-xs text-orange-500 dark:text-orange-400">
                             <div className="flex items-baseline justify-end">
-                              <span className="w-24 text-right text-xs text-purple-400 mr-4">{m.zeitaufwand_stunden != null ? `${m.zeitaufwand_stunden} Std.` : ''}</span>
-                              {formatEuro(m.gesamtpreis)}
+                              <span className="w-20 text-right text-xs text-purple-400 mr-3">{m.zeitaufwand_stunden != null ? `${m.zeitaufwand_stunden} Std.` : ''}</span>
+                              <span className="w-32 text-right">{formatEuro(m.gesamtpreis)}</span>
                             </div>
                           </td>
                         </tr>
