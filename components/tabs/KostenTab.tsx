@@ -314,7 +314,7 @@ export default function KostenTab() {
                     <span className="ml-2 text-xs font-normal text-gray-400">(eigene Materialien)</span>
                   </td>
                   <td className="px-6 py-4 text-right font-semibold text-orange-600 dark:text-orange-400">
-                    <div className="flex items-center justify-end gap-4">
+                    <div className="flex items-baseline justify-end gap-4">
                       {gesamtStunden > 0 && <span className="text-xs font-normal text-purple-500 dark:text-purple-400">{gesamtStunden.toLocaleString('de-DE')} Std.</span>}
                       {formatEuro(materialGesamt)}
                     </div>
@@ -339,7 +339,7 @@ export default function KostenTab() {
                           <span className="text-xs text-gray-400 mr-2 font-mono">{g.gewerk_nr}</span>{g.gewerk === '__frei__' ? 'Zusätzliche Eigenleistungen' : g.gewerk}
                         </td>
                         <td className="px-6 py-2 text-right text-orange-600 dark:text-orange-400">
-                          <div className="flex items-center justify-end gap-4">
+                          <div className="flex items-baseline justify-end gap-4">
                             {gwStunden > 0 && <span className="text-xs text-purple-400">{gwStunden.toLocaleString('de-DE')} Std.</span>}
                             {formatEuro(g.material_summe)}
                           </div>
@@ -352,7 +352,7 @@ export default function KostenTab() {
                             {m.menge != null && <span className="ml-1 text-gray-400">{m.menge} {m.einheit ?? ''}</span>}
                           </td>
                           <td className="px-6 py-1 text-right text-xs text-orange-500 dark:text-orange-400">
-                            <div className="flex items-center justify-end gap-3">
+                            <div className="flex items-baseline justify-end gap-3">
                               {m.zeitaufwand_stunden != null && <span className="text-purple-400">{m.zeitaufwand_stunden} h</span>}
                               {formatEuro(m.gesamtpreis)}
                             </div>
