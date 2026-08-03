@@ -186,13 +186,13 @@ export default function ZahlungenTab() {
 
           const offeneKosten = kostenVorlagen
             .map(v => ({ ...v, bezahlt: bezahltNachName[v.bezeichnung.trim().toLowerCase()] ?? 0 }))
-            .filter(v => v.bezahlt < v.betrag);
-          const vollBezahltKosten = kostenVorlagen.length - offeneKosten.length;
+            .filter(v => v.betrag > 0 && v.bezahlt < v.betrag);
+          const vollBezahltKosten = kostenVorlagen.filter(v => v.betrag > 0).length - offeneKosten.length;
 
           const offeneEigenleistungen = eigenleistungVorlagen
             .map(e => ({ ...e, bezahlt: bezahltNachName[e.bezeichnung.trim().toLowerCase()] ?? 0 }))
-            .filter(e => e.bezahlt < e.gesamtpreis);
-          const vollBezahltEigen = eigenleistungVorlagen.length - offeneEigenleistungen.length;
+            .filter(e => e.gesamtpreis > 0 && e.bezahlt < e.gesamtpreis);
+          const vollBezahltEigen = eigenleistungVorlagen.filter(e => e.gesamtpreis > 0).length - offeneEigenleistungen.length;
 
           const vollBezahlt = vollBezahltKosten + vollBezahltEigen;
           const kostenKategorien = [...new Set(offeneKosten.map(v => v.kategorie))];
