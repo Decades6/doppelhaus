@@ -61,6 +61,13 @@ interface MaterialGewerk {
 
 const LEER_FORM = { bezeichnung: '', betrag: '', menge: '', einzelpreis: '' };
 
+function Ampel({ bezahlt, gesamt }: { bezahlt: number; gesamt: number }) {
+  if (gesamt <= 0) return null;
+  const color = bezahlt >= gesamt ? 'bg-green-500' : bezahlt > 0 ? 'bg-yellow-400' : 'bg-red-500';
+  const title = bezahlt >= gesamt ? 'Vollständig bezahlt' : bezahlt > 0 ? 'Teilweise bezahlt' : 'Noch nicht bezahlt';
+  return <span className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${color}`} title={title} />;
+}
+
 export default function KostenTab() {
   const [version, setVersion] = useState<Version | null>(null);
   const [eigenleistungGewerke, setEigenleistungGewerke] = useState<EigenleistungGewerk[]>([]);
@@ -77,6 +84,8 @@ export default function KostenTab() {
   const [bearbeitungKategorie, setBearbeitungKategorie] = useState<Kategorie | null>(null);
   const [grundstueckspreisEingabe, setGrundstueckspreisEingabe] = useState('');
   const speicherTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [bezahltNachBeschreibung, setBezahltNachBeschreibung] = useState<Record<string, number>>({});
+  const [bezahltNachKategorie, setBezahltNachKategorie] = useState<Record<string, number>>({});
 
   useEffect(() => { ladeDaten(); }, []);
 
@@ -121,9 +130,10 @@ export default function KostenTab() {
       }
     }
 
-    const [{ data: anschlussRows }, { data: positionen }] = await Promise.all([
+    const [{ data: anschlussRows }, { data: positionen }, { data: z }] = await Promise.all([
       supabase.from('kosten_manuell').select('schluessel, betrag'),
       supabase.from('kosten_positionen').select('id, kategorie, bezeichnung, betrag, menge').order('created_at', { ascending: true }),
+      supabase.from('zahlungen').select('beschreibung, kategorie, betrag'),
     ]);
 
     if (anschlussRows) {
@@ -146,6 +156,18 @@ export default function KostenTab() {
         grouped[p.kategorie].push(p);
       }
       setKostenPositionen(grouped);
+    }
+
+    if (z) {
+      const beschMap: Record<string, number> = {};
+      const katMap: Record<string, number> = {};
+      for (const zahlung of z as { beschreibung: string; kategorie: string; betrag: number }[]) {
+        const key = zahlung.beschreibung.trim().toLowerCase();
+        beschMap[key] = (beschMap[key] ?? 0) + zahlung.betrag;
+        katMap[zahlung.kategorie] = (katMap[zahlung.kategorie] ?? 0) + zahlung.betrag;
+      }
+      setBezahltNachBeschreibung(beschMap);
+      setBezahltNachKategorie(katMap);
     }
 
     setLaden(false);
@@ -291,7 +313,12 @@ export default function KostenTab() {
             <tr className="bg-blue-50/50 dark:bg-blue-900/10">
               <td className="px-6 py-4 font-semibold text-gray-800 dark:text-white">Hauskosten</td>
               <td className="px-6 py-4 text-right font-semibold text-gray-800 dark:text-white">
-                {brutto > 0 ? formatEuro(brutto) : <span className="text-gray-400 text-xs">Kein Angebot geladen</span>}
+                {brutto > 0 ? (
+                  <span className="inline-flex items-center justify-end gap-2">
+                    <Ampel bezahlt={bezahltNachKategorie['Bauträger'] ?? 0} gesamt={brutto} />
+                    {formatEuro(brutto)}
+                  </span>
+                ) : <span className="text-gray-400 text-xs">Kein Angebot geladen</span>}
               </td>
             </tr>
             {brutto > 0 && (
@@ -410,14 +437,22 @@ export default function KostenTab() {
                   <tr>
                     <td className="px-6 py-3 font-medium text-gray-700 dark:text-gray-200">{KATEGORIEN_NAMEN[key]}</td>
                     <td className="px-6 py-3 text-right text-gray-600 dark:text-gray-300">
-                      {summe > 0 ? formatEuro(summe) : <span className="text-gray-300 dark:text-gray-600">—</span>}
+                      {summe > 0 ? (
+                        <span className="inline-flex items-center justify-end gap-2">
+                          <Ampel bezahlt={bezahltNachKategorie[KATEGORIEN_NAMEN[key]] ?? 0} gesamt={summe} />
+                          {formatEuro(summe)}
+                        </span>
+                      ) : <span className="text-gray-300 dark:text-gray-600">—</span>}
                     </td>
                   </tr>
                   {positionen.map(pos => (
                     <tr key={pos.id} className={bearbeitungId === pos.id ? 'bg-amber-50 dark:bg-amber-900/20' : ''}>
                       <td className="px-6 py-1.5 pl-10 text-xs text-gray-500 dark:text-gray-400">{pos.bezeichnung}</td>
                       <td className="px-6 py-1.5 text-right text-xs text-gray-600 dark:text-gray-300">
-                        {formatEuro(pos.betrag)}
+                        <span className="inline-flex items-center justify-end gap-2">
+                          <Ampel bezahlt={bezahltNachBeschreibung[pos.bezeichnung.trim().toLowerCase()] ?? 0} gesamt={pos.betrag} />
+                          {formatEuro(pos.betrag)}
+                        </span>
                         <button onClick={() => bearbeitungStarten(pos)}
                           className="ml-2 text-gray-300 hover:text-amber-500 transition-colors print:hidden" title="Bearbeiten">✎</button>
                         <button onClick={() => positionLoeschen(pos.id, key)}
@@ -463,7 +498,12 @@ export default function KostenTab() {
                 Anschlüsse <span className="ml-2 text-xs font-normal text-gray-400">(Strom, Wasser, Siel, Telekom)</span>
               </td>
               <td className="px-6 py-3 text-right text-gray-600 dark:text-gray-300">
-                {anschluesseGesamt > 0 ? formatEuro(anschluesseGesamt) : <span className="text-gray-300 dark:text-gray-600">—</span>}
+                {anschluesseGesamt > 0 ? (
+                  <span className="inline-flex items-center justify-end gap-2">
+                    <Ampel bezahlt={bezahltNachKategorie['Anschlüsse'] ?? 0} gesamt={anschluesseGesamt} />
+                    {formatEuro(anschluesseGesamt)}
+                  </span>
+                ) : <span className="text-gray-300 dark:text-gray-600">—</span>}
               </td>
             </tr>
             {(Object.keys(ANSCHLUSS_NAMEN) as (keyof AnschlussKosten)[]).map(key => (
@@ -471,6 +511,7 @@ export default function KostenTab() {
                 <td className="px-6 py-2 pl-10 text-gray-500 dark:text-gray-400">{ANSCHLUSS_NAMEN[key]}</td>
                 <td className="px-6 py-2 text-right">
                   <div className="flex items-center justify-end gap-1">
+                    <Ampel bezahlt={bezahltNachBeschreibung[ANSCHLUSS_NAMEN[key].toLowerCase()] ?? 0} gesamt={anschluesse[key]} />
                     <input type="text" value={anschlussEingaben[key] ?? ''} onChange={e => anschlussGeaendert(key, e.target.value)}
                       placeholder="0,00"
                       className="w-36 text-right text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100 print:border-0 print:bg-transparent" />
@@ -491,7 +532,12 @@ export default function KostenTab() {
                   <tr>
                     <td className="px-6 py-3 font-medium text-gray-700 dark:text-gray-200">{KATEGORIEN_NAMEN[key]}</td>
                     <td className="px-6 py-3 text-right text-gray-600 dark:text-gray-300">
-                      {summe > 0 ? formatEuro(summe) : <span className="text-gray-300 dark:text-gray-600">—</span>}
+                      {summe > 0 ? (
+                        <span className="inline-flex items-center justify-end gap-2">
+                          <Ampel bezahlt={bezahltNachKategorie[KATEGORIEN_NAMEN[key]] ?? 0} gesamt={summe} />
+                          {formatEuro(summe)}
+                        </span>
+                      ) : <span className="text-gray-300 dark:text-gray-600">—</span>}
                     </td>
                   </tr>
                   {positionen.map(pos => (
@@ -501,7 +547,10 @@ export default function KostenTab() {
                         {pos.bezeichnung}
                       </td>
                       <td className="px-6 py-1.5 text-right text-xs text-gray-600 dark:text-gray-300">
-                        {formatEuro(pos.betrag)}
+                        <span className="inline-flex items-center justify-end gap-2">
+                          <Ampel bezahlt={bezahltNachBeschreibung[pos.bezeichnung.trim().toLowerCase()] ?? 0} gesamt={pos.betrag} />
+                          {formatEuro(pos.betrag)}
+                        </span>
                         <button onClick={() => bearbeitungStarten(pos)}
                           className="ml-2 text-gray-300 hover:text-amber-500 transition-colors print:hidden" title="Bearbeiten">✎</button>
                         <button onClick={() => positionLoeschen(pos.id, key)}
@@ -559,7 +608,12 @@ export default function KostenTab() {
                   <tr>
                     <td className="px-6 py-3 font-medium text-gray-700 dark:text-gray-200">{KATEGORIEN_NAMEN[key]}</td>
                     <td className="px-6 py-3 text-right text-gray-600 dark:text-gray-300">
-                      {summe > 0 ? formatEuro(summe) : <span className="text-gray-300 dark:text-gray-600">—</span>}
+                      {summe > 0 ? (
+                        <span className="inline-flex items-center justify-end gap-2">
+                          <Ampel bezahlt={bezahltNachKategorie[KATEGORIEN_NAMEN[key]] ?? 0} gesamt={summe} />
+                          {formatEuro(summe)}
+                        </span>
+                      ) : <span className="text-gray-300 dark:text-gray-600">—</span>}
                     </td>
                   </tr>
                   {positionen.map(pos => (
@@ -569,7 +623,10 @@ export default function KostenTab() {
                         {pos.bezeichnung}
                       </td>
                       <td className="px-6 py-1.5 text-right text-xs text-gray-600 dark:text-gray-300">
-                        {formatEuro(pos.betrag)}
+                        <span className="inline-flex items-center justify-end gap-2">
+                          <Ampel bezahlt={bezahltNachBeschreibung[pos.bezeichnung.trim().toLowerCase()] ?? 0} gesamt={pos.betrag} />
+                          {formatEuro(pos.betrag)}
+                        </span>
                         <button onClick={() => bearbeitungStarten(pos)}
                           className="ml-2 text-gray-300 hover:text-amber-500 transition-colors print:hidden" title="Bearbeiten">✎</button>
                         <button onClick={() => positionLoeschen(pos.id, key)}
