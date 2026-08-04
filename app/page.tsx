@@ -25,7 +25,7 @@ export default function Dashboard() {
   return (
     <div>
       {/* Tab-Navigation */}
-      <div className="flex gap-1 mb-8 bg-gray-100 dark:bg-gray-800 rounded-xl p-1">
+      <div className="flex gap-1 mb-8 bg-gray-100 dark:bg-gray-800 rounded-xl p-1 print:hidden">
         {TABS.map(tab => (
           <button
             key={tab.id}
