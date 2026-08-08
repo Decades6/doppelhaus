@@ -24,19 +24,25 @@ const ANSCHLUSS_NAMEN: Record<keyof AnschlussKosten, string> = {
   telekomanschluss: 'Telekomanschluss',
 };
 
-// Dynamische Kategorien mit Unterpunkten
-const KATEGORIEN = ['nebenkosten', 'notar', 'vermessung', 'erdarbeiten', 'kueche', 'maschinen', 'sonstiges'] as const;
+const KATEGORIEN = ['planung', 'versicherungen', 'nebenkosten', 'notar', 'baustelle', 'erdarbeiten', 'vermessung', 'aussenanlagen', 'kueche', 'maschinen', 'sonstiges'] as const;
 type Kategorie = typeof KATEGORIEN[number];
 
 const KATEGORIEN_NAMEN: Record<Kategorie, string> = {
-  nebenkosten: 'Nebenkosten',
-  notar: 'Notar',
-  vermessung: 'Vermessung',
+  planung: 'Planung & Genehmigung',
+  versicherungen: 'Versicherungen',
+  nebenkosten: 'Erschließung & Abgaben',
+  notar: 'Notar & Grundbuch',
+  baustelle: 'Baustelle',
   erdarbeiten: 'Erdarbeiten',
+  vermessung: 'Vermessung',
+  aussenanlagen: 'Außenanlagen',
   kueche: 'Küche',
   maschinen: 'Maschinen und Werkzeug',
   sonstiges: 'Sonstiges',
 };
+
+const BAUNEBENKOSTEN_KEYS: readonly Kategorie[] = ['planung', 'versicherungen', 'nebenkosten', 'notar', 'baustelle', 'erdarbeiten', 'vermessung'];
+const WEITERE_KOSTEN_KEYS: readonly Kategorie[] = ['kueche', 'maschinen', 'sonstiges'];
 
 interface KostenPosition {
   id: string;
@@ -274,10 +280,140 @@ export default function KostenTab() {
   const vorschlagNotar = grundstueckspreis > 0 ? Math.round((grundstueckspreis + brutto) * 0.015 * 100) / 100 : 0;
   const materialGesamt = materialGewerke.reduce((s, g) => s + g.material_summe, 0);
   const anschluesseGesamt = Object.values(anschluesse).reduce((s, v) => s + v, 0);
-  const positionenGesamt = Object.values(kostenPositionen).flat().reduce((s, p) => s + p.betrag, 0);
   const gesamtStunden = Object.values(materialDetails).flat().reduce((s, m) => s + (m.zeitaufwand_stunden ?? 0), 0);
-  const manuelleGesamt = anschluesseGesamt + positionenGesamt;
-  const gesamtFinanzierung = brutto + materialGesamt + manuelleGesamt;
+  const baunebenkostenPositionen = BAUNEBENKOSTEN_KEYS.reduce((s, k) => s + (kostenPositionen[k] ?? []).reduce((ss, p) => ss + p.betrag, 0), 0);
+  const baunebenkostenGesamt = baunebenkostenPositionen + anschluesseGesamt;
+  const aussenanlagenGesamt = (kostenPositionen['aussenanlagen'] ?? []).reduce((s, p) => s + p.betrag, 0);
+  const weitereKostenGesamt = WEITERE_KOSTEN_KEYS.reduce((s, k) => s + (kostenPositionen[k] ?? []).reduce((ss, p) => ss + p.betrag, 0), 0);
+  const gesamtFinanzierung = brutto + materialGesamt + baunebenkostenGesamt + aussenanlagenGesamt + weitereKostenGesamt;
+
+  function renderKategorie(key: Kategorie) {
+    const pos = kostenPositionen[key] ?? [];
+    const summe = pos.reduce((s, p) => s + p.betrag, 0);
+    const form = neuForm[key] ?? LEER_FORM;
+    return (
+      <Fragment key={key}>
+        <tr>
+          <td className="px-6 py-2.5 pl-8 font-medium text-sm text-gray-700 dark:text-gray-200">{KATEGORIEN_NAMEN[key]}</td>
+          <td className="px-6 py-2.5 text-right text-gray-600 dark:text-gray-300">
+            {summe > 0 ? (
+              <span className="inline-flex items-center justify-end gap-2">
+                <Ampel bezahlt={bezahltNachKategorie[KATEGORIEN_NAMEN[key]] ?? 0} gesamt={summe} />
+                {formatEuro(summe)}
+              </span>
+            ) : <span className="text-gray-300 dark:text-gray-600">—</span>}
+          </td>
+        </tr>
+        {pos.map(p => (
+          <tr key={p.id} className={bearbeitungId === p.id ? 'bg-amber-50 dark:bg-amber-900/20' : ''}>
+            <td className="px-6 py-1.5 pl-14 text-xs text-gray-500 dark:text-gray-400">{p.bezeichnung}</td>
+            <td className="px-6 py-1.5 text-right text-xs text-gray-600 dark:text-gray-300">
+              <span className="inline-flex items-center justify-end gap-2">
+                <Ampel bezahlt={bezahltNachBeschreibung[p.bezeichnung.trim().toLowerCase()] ?? 0} gesamt={p.betrag} />
+                {formatEuro(p.betrag)}
+              </span>
+              <button onClick={() => bearbeitungStarten(p)} className="ml-2 text-gray-300 hover:text-amber-500 transition-colors print:hidden" title="Bearbeiten">✎</button>
+              <button onClick={() => positionLoeschen(p.id, key)} className="ml-1 text-gray-300 hover:text-red-400 transition-colors print:hidden">×</button>
+            </td>
+          </tr>
+        ))}
+        <tr className="print:hidden">
+          <td colSpan={2} className="px-6 pb-2.5 pl-14">
+            <div className="flex items-center gap-2">
+              <input type="text" value={form.bezeichnung}
+                onChange={e => setNeuForm(prev => ({ ...prev, [key]: { ...prev[key] ?? LEER_FORM, bezeichnung: e.target.value } }))}
+                onKeyDown={e => e.key === 'Enter' && positionHinzufuegen(key)}
+                placeholder="Bezeichnung"
+                className="flex-1 text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
+              <input type="text" value={form.betrag}
+                onChange={e => setNeuForm(prev => ({ ...prev, [key]: { ...prev[key] ?? LEER_FORM, betrag: e.target.value } }))}
+                onKeyDown={e => e.key === 'Enter' && positionHinzufuegen(key)}
+                placeholder="0,00"
+                className="w-28 text-right text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
+              <span className="text-xs text-gray-400">€</span>
+              {bearbeitungId && bearbeitungKategorie === key && (
+                <button onClick={bearbeitungAbbrechen} className="text-xs text-gray-500 dark:text-gray-400 px-2 py-1 rounded border border-gray-200 dark:border-gray-600 hover:border-gray-400 transition-colors whitespace-nowrap">Abbrechen</button>
+              )}
+              <button onClick={() => positionHinzufuegen(key)}
+                disabled={!form.bezeichnung.trim() || (parseGermanNumber(form.betrag) ?? 0) <= 0}
+                className={`text-xs disabled:text-gray-300 dark:disabled:text-gray-600 disabled:cursor-not-allowed transition-colors whitespace-nowrap ${bearbeitungId && bearbeitungKategorie === key ? 'text-amber-500 hover:text-amber-700 dark:hover:text-amber-400' : 'text-blue-500 hover:text-blue-700 dark:hover:text-blue-400'}`}>
+                {bearbeitungId && bearbeitungKategorie === key ? 'Speichern' : '+ Hinzufügen'}
+              </button>
+            </div>
+          </td>
+        </tr>
+      </Fragment>
+    );
+  }
+
+  function renderMengeEpKategorie(key: 'maschinen' | 'sonstiges') {
+    const pos = kostenPositionen[key] ?? [];
+    const summe = pos.reduce((s, p) => s + p.betrag, 0);
+    const form = neuForm[key] ?? LEER_FORM;
+    return (
+      <Fragment key={key}>
+        <tr>
+          <td className="px-6 py-2.5 pl-8 font-medium text-sm text-gray-700 dark:text-gray-200">{KATEGORIEN_NAMEN[key]}</td>
+          <td className="px-6 py-2.5 text-right text-gray-600 dark:text-gray-300">
+            {summe > 0 ? (
+              <span className="inline-flex items-center justify-end gap-2">
+                <Ampel bezahlt={bezahltNachKategorie[KATEGORIEN_NAMEN[key]] ?? 0} gesamt={summe} />
+                {formatEuro(summe)}
+              </span>
+            ) : <span className="text-gray-300 dark:text-gray-600">—</span>}
+          </td>
+        </tr>
+        {pos.map(p => (
+          <tr key={p.id} className={bearbeitungId === p.id ? 'bg-amber-50 dark:bg-amber-900/20' : ''}>
+            <td className="px-6 py-1.5 pl-14 text-xs text-gray-500 dark:text-gray-400">
+              {p.menge && <span className="mr-1.5 text-gray-400">{p.menge}×</span>}
+              {p.bezeichnung}
+            </td>
+            <td className="px-6 py-1.5 text-right text-xs text-gray-600 dark:text-gray-300">
+              <span className="inline-flex items-center justify-end gap-2">
+                <Ampel bezahlt={bezahltNachBeschreibung[p.bezeichnung.trim().toLowerCase()] ?? 0} gesamt={p.betrag} />
+                {formatEuro(p.betrag)}
+              </span>
+              <button onClick={() => bearbeitungStarten(p)} className="ml-2 text-gray-300 hover:text-amber-500 transition-colors print:hidden" title="Bearbeiten">✎</button>
+              <button onClick={() => positionLoeschen(p.id, key)} className="ml-1 text-gray-300 hover:text-red-400 transition-colors print:hidden">×</button>
+            </td>
+          </tr>
+        ))}
+        <tr className="print:hidden">
+          <td colSpan={2} className="px-6 pb-2.5 pl-14">
+            <div className="flex items-center gap-2 flex-wrap">
+              <input type="text" value={form.bezeichnung}
+                onChange={e => setNeuForm(prev => ({ ...prev, [key]: { ...prev[key] ?? LEER_FORM, bezeichnung: e.target.value } }))}
+                onKeyDown={e => e.key === 'Enter' && positionHinzufuegen(key)}
+                placeholder="Bezeichnung"
+                className="flex-1 min-w-40 text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
+              <input type="text" value={form.menge}
+                onChange={e => mengeEpAendern(key, 'menge', e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && positionHinzufuegen(key)}
+                placeholder="Menge"
+                className="w-16 text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
+              <span className="text-xs text-gray-400">×</span>
+              <input type="text" value={form.einzelpreis}
+                onChange={e => mengeEpAendern(key, 'einzelpreis', e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && positionHinzufuegen(key)}
+                placeholder="EP"
+                className="w-24 text-right text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
+              <span className="text-xs text-gray-400">€</span>
+              {form.betrag && <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">= {form.betrag} €</span>}
+              {bearbeitungId && bearbeitungKategorie === key && (
+                <button onClick={bearbeitungAbbrechen} className="text-xs text-gray-500 dark:text-gray-400 px-2 py-1 rounded border border-gray-200 dark:border-gray-600 hover:border-gray-400 transition-colors whitespace-nowrap">Abbrechen</button>
+              )}
+              <button onClick={() => positionHinzufuegen(key)}
+                disabled={!form.bezeichnung.trim() || (parseGermanNumber(form.betrag) ?? 0) <= 0}
+                className={`text-xs disabled:text-gray-300 dark:disabled:text-gray-600 disabled:cursor-not-allowed transition-colors whitespace-nowrap ${bearbeitungId && bearbeitungKategorie === key ? 'text-amber-500 hover:text-amber-700 dark:hover:text-amber-400' : 'text-blue-500 hover:text-blue-700 dark:hover:text-blue-400'}`}>
+                {bearbeitungId && bearbeitungKategorie === key ? 'Speichern' : '+ Hinzufügen'}
+              </button>
+            </div>
+          </td>
+        </tr>
+      </Fragment>
+    );
+  }
 
   if (laden) return <div className="text-center py-16 text-gray-500">Lade Daten...</div>;
 
@@ -392,12 +528,17 @@ export default function KostenTab() {
               </>
             )}
 
-            {/* Weitere Kosten — Header */}
-            <tr><td colSpan={2} className="px-6 py-2 bg-gray-50 dark:bg-gray-700/50 text-xs font-semibold text-gray-400 uppercase tracking-wide">Weitere Kosten</td></tr>
+            {/* ══ BAUNEBENKOSTEN ══ */}
+            <tr className="bg-gray-100 dark:bg-gray-700/80">
+              <td className="px-6 py-3 font-bold text-gray-800 dark:text-white text-sm tracking-wide">Baunebenkosten</td>
+              <td className="px-6 py-3 text-right font-bold text-gray-800 dark:text-white">
+                {baunebenkostenGesamt > 0 ? formatEuro(baunebenkostenGesamt) : <span className="text-gray-400 font-normal text-xs">—</span>}
+              </td>
+            </tr>
 
             {/* Pauschale-Hilfe */}
             <tr className="print:hidden bg-amber-50/50 dark:bg-amber-900/10">
-              <td colSpan={2} className="px-6 py-3">
+              <td colSpan={2} className="px-6 py-3 pl-8">
                 <div className="flex items-center gap-4 flex-wrap">
                   <span className="text-xs text-amber-700 dark:text-amber-400 font-medium">Pauschale berechnen (Hamburg):</span>
                   <div className="flex items-center gap-2">
@@ -412,7 +553,7 @@ export default function KostenTab() {
                         onClick={() => setNeuForm(prev => ({ ...prev, nebenkosten: { bezeichnung: 'Grunderwerbsteuer (5,5 %)', betrag: formatGermanNumber(vorschlagNebenkosten), menge: '', einzelpreis: '' } }))}
                         className="text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 px-3 py-1 rounded-full hover:bg-amber-200 transition-colors"
                         title="Grunderwerbsteuer Hamburg: 5,5 % vom Grundstückspreis">
-                        Nebenkosten {formatEuro(vorschlagNebenkosten)} vorschlagen
+                        Erschließung {formatEuro(vorschlagNebenkosten)} vorschlagen
                       </button>
                       <button
                         onClick={() => setNeuForm(prev => ({ ...prev, notar: { bezeichnung: 'Notar & Grundbuch (1,5 %)', betrag: formatGermanNumber(vorschlagNotar), menge: '', einzelpreis: '' } }))}
@@ -426,78 +567,17 @@ export default function KostenTab() {
               </td>
             </tr>
 
-            {/* Dynamische Kategorien mit Unterpunkten (ohne Sonstiges und Maschinen — kommen nach Anschlüsse) */}
-            {KATEGORIEN.filter(k => k !== 'sonstiges' && k !== 'maschinen').map(key => {
-              const positionen = kostenPositionen[key] ?? [];
-              const summe = positionen.reduce((s, p) => s + p.betrag, 0);
-              const form = neuForm[key] ?? LEER_FORM;
+            {renderKategorie('planung')}
+            {renderKategorie('versicherungen')}
+            {renderKategorie('nebenkosten')}
+            {renderKategorie('notar')}
 
-              return (
-                <Fragment key={key}>
-                  <tr>
-                    <td className="px-6 py-3 font-medium text-gray-700 dark:text-gray-200">{KATEGORIEN_NAMEN[key]}</td>
-                    <td className="px-6 py-3 text-right text-gray-600 dark:text-gray-300">
-                      {summe > 0 ? (
-                        <span className="inline-flex items-center justify-end gap-2">
-                          <Ampel bezahlt={bezahltNachKategorie[KATEGORIEN_NAMEN[key]] ?? 0} gesamt={summe} />
-                          {formatEuro(summe)}
-                        </span>
-                      ) : <span className="text-gray-300 dark:text-gray-600">—</span>}
-                    </td>
-                  </tr>
-                  {positionen.map(pos => (
-                    <tr key={pos.id} className={bearbeitungId === pos.id ? 'bg-amber-50 dark:bg-amber-900/20' : ''}>
-                      <td className="px-6 py-1.5 pl-10 text-xs text-gray-500 dark:text-gray-400">{pos.bezeichnung}</td>
-                      <td className="px-6 py-1.5 text-right text-xs text-gray-600 dark:text-gray-300">
-                        <span className="inline-flex items-center justify-end gap-2">
-                          <Ampel bezahlt={bezahltNachBeschreibung[pos.bezeichnung.trim().toLowerCase()] ?? 0} gesamt={pos.betrag} />
-                          {formatEuro(pos.betrag)}
-                        </span>
-                        <button onClick={() => bearbeitungStarten(pos)}
-                          className="ml-2 text-gray-300 hover:text-amber-500 transition-colors print:hidden" title="Bearbeiten">✎</button>
-                        <button onClick={() => positionLoeschen(pos.id, key)}
-                          className="ml-1 text-gray-300 hover:text-red-400 transition-colors print:hidden">×</button>
-                      </td>
-                    </tr>
-                  ))}
-                  <tr className="print:hidden">
-                    <td colSpan={2} className="px-6 pb-3 pl-10">
-                      <div className="flex items-center gap-2">
-                        <input type="text" value={form.bezeichnung}
-                          onChange={e => setNeuForm(prev => ({ ...prev, [key]: { ...prev[key] ?? LEER_FORM, bezeichnung: e.target.value } }))}
-                          onKeyDown={e => e.key === 'Enter' && positionHinzufuegen(key)}
-                          placeholder="Bezeichnung"
-                          className="flex-1 text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
-                        <input type="text" value={form.betrag}
-                          onChange={e => setNeuForm(prev => ({ ...prev, [key]: { ...prev[key] ?? LEER_FORM, betrag: e.target.value } }))}
-                          onKeyDown={e => e.key === 'Enter' && positionHinzufuegen(key)}
-                          placeholder="0,00"
-                          className="w-28 text-right text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
-                        <span className="text-xs text-gray-400">€</span>
-                        {bearbeitungId && bearbeitungKategorie === key && (
-                          <button onClick={bearbeitungAbbrechen}
-                            className="text-xs text-gray-500 dark:text-gray-400 px-2 py-1 rounded border border-gray-200 dark:border-gray-600 hover:border-gray-400 transition-colors whitespace-nowrap">
-                            Abbrechen
-                          </button>
-                        )}
-                        <button onClick={() => positionHinzufuegen(key)}
-                          disabled={!form.bezeichnung.trim() || (parseGermanNumber(form.betrag) ?? 0) <= 0}
-                          className={`text-xs disabled:text-gray-300 dark:disabled:text-gray-600 disabled:cursor-not-allowed transition-colors whitespace-nowrap ${bearbeitungId && bearbeitungKategorie === key ? 'text-amber-500 hover:text-amber-700 dark:hover:text-amber-400' : 'text-blue-500 hover:text-blue-700 dark:hover:text-blue-400'}`}>
-                          {bearbeitungId && bearbeitungKategorie === key ? 'Speichern' : '+ Hinzufügen'}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                </Fragment>
-              );
-            })}
-
-            {/* Anschlüsse (feste Unterpunkte) */}
+            {/* Anschlüsse (feste Felder) */}
             <tr>
-              <td className="px-6 py-3 font-medium text-gray-700 dark:text-gray-200">
+              <td className="px-6 py-2.5 pl-8 font-medium text-sm text-gray-700 dark:text-gray-200">
                 Anschlüsse <span className="ml-2 text-xs font-normal text-gray-400">(Strom, Wasser, Siel, Telekom)</span>
               </td>
-              <td className="px-6 py-3 text-right text-gray-600 dark:text-gray-300">
+              <td className="px-6 py-2.5 text-right text-gray-600 dark:text-gray-300">
                 {anschluesseGesamt > 0 ? (
                   <span className="inline-flex items-center justify-end gap-2">
                     <Ampel bezahlt={bezahltNachKategorie['Anschlüsse'] ?? 0} gesamt={anschluesseGesamt} />
@@ -508,7 +588,7 @@ export default function KostenTab() {
             </tr>
             {(Object.keys(ANSCHLUSS_NAMEN) as (keyof AnschlussKosten)[]).map(key => (
               <tr key={key}>
-                <td className="px-6 py-2 pl-10 text-gray-500 dark:text-gray-400">{ANSCHLUSS_NAMEN[key]}</td>
+                <td className="px-6 py-2 pl-14 text-xs text-gray-500 dark:text-gray-400">{ANSCHLUSS_NAMEN[key]}</td>
                 <td className="px-6 py-2 text-right">
                   <div className="flex items-center justify-end gap-1">
                     <Ampel bezahlt={bezahltNachBeschreibung[ANSCHLUSS_NAMEN[key].toLowerCase()] ?? 0} gesamt={anschluesse[key]} />
@@ -521,163 +601,35 @@ export default function KostenTab() {
               </tr>
             ))}
 
-            {/* Maschinen und Werkzeug (vor Sonstiges) */}
-            {(() => {
-              const key = 'maschinen' as const;
-              const positionen = kostenPositionen[key] ?? [];
-              const summe = positionen.reduce((s, p) => s + p.betrag, 0);
-              const form = neuForm[key] ?? LEER_FORM;
-              return (
-                <Fragment key={key}>
-                  <tr>
-                    <td className="px-6 py-3 font-medium text-gray-700 dark:text-gray-200">{KATEGORIEN_NAMEN[key]}</td>
-                    <td className="px-6 py-3 text-right text-gray-600 dark:text-gray-300">
-                      {summe > 0 ? (
-                        <span className="inline-flex items-center justify-end gap-2">
-                          <Ampel bezahlt={bezahltNachKategorie[KATEGORIEN_NAMEN[key]] ?? 0} gesamt={summe} />
-                          {formatEuro(summe)}
-                        </span>
-                      ) : <span className="text-gray-300 dark:text-gray-600">—</span>}
-                    </td>
-                  </tr>
-                  {positionen.map(pos => (
-                    <tr key={pos.id} className={bearbeitungId === pos.id ? 'bg-amber-50 dark:bg-amber-900/20' : ''}>
-                      <td className="px-6 py-1.5 pl-10 text-xs text-gray-500 dark:text-gray-400">
-                        {pos.menge && <span className="mr-1.5 text-gray-400">{pos.menge}×</span>}
-                        {pos.bezeichnung}
-                      </td>
-                      <td className="px-6 py-1.5 text-right text-xs text-gray-600 dark:text-gray-300">
-                        <span className="inline-flex items-center justify-end gap-2">
-                          <Ampel bezahlt={bezahltNachBeschreibung[pos.bezeichnung.trim().toLowerCase()] ?? 0} gesamt={pos.betrag} />
-                          {formatEuro(pos.betrag)}
-                        </span>
-                        <button onClick={() => bearbeitungStarten(pos)}
-                          className="ml-2 text-gray-300 hover:text-amber-500 transition-colors print:hidden" title="Bearbeiten">✎</button>
-                        <button onClick={() => positionLoeschen(pos.id, key)}
-                          className="ml-1 text-gray-300 hover:text-red-400 transition-colors print:hidden">×</button>
-                      </td>
-                    </tr>
-                  ))}
-                  <tr className="print:hidden">
-                    <td colSpan={2} className="px-6 pb-3 pl-10">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <input type="text" value={form.bezeichnung}
-                          onChange={e => setNeuForm(prev => ({ ...prev, [key]: { ...prev[key] ?? LEER_FORM, bezeichnung: e.target.value } }))}
-                          onKeyDown={e => e.key === 'Enter' && positionHinzufuegen(key)}
-                          placeholder="Bezeichnung"
-                          className="flex-1 min-w-40 text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
-                        <input type="text" value={form.menge}
-                          onChange={e => mengeEpAendern(key, 'menge', e.target.value)}
-                          onKeyDown={e => e.key === 'Enter' && positionHinzufuegen(key)}
-                          placeholder="Menge"
-                          className="w-16 text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
-                        <span className="text-xs text-gray-400">×</span>
-                        <input type="text" value={form.einzelpreis}
-                          onChange={e => mengeEpAendern(key, 'einzelpreis', e.target.value)}
-                          onKeyDown={e => e.key === 'Enter' && positionHinzufuegen(key)}
-                          placeholder="EP"
-                          className="w-24 text-right text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
-                        <span className="text-xs text-gray-400">€</span>
-                        {form.betrag && <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">= {form.betrag} €</span>}
-                        {bearbeitungId && bearbeitungKategorie === key && (
-                          <button onClick={bearbeitungAbbrechen}
-                            className="text-xs text-gray-500 dark:text-gray-400 px-2 py-1 rounded border border-gray-200 dark:border-gray-600 hover:border-gray-400 transition-colors whitespace-nowrap">
-                            Abbrechen
-                          </button>
-                        )}
-                        <button onClick={() => positionHinzufuegen(key)}
-                          disabled={!form.bezeichnung.trim() || (parseGermanNumber(form.betrag) ?? 0) <= 0}
-                          className={`text-xs disabled:text-gray-300 dark:disabled:text-gray-600 disabled:cursor-not-allowed transition-colors whitespace-nowrap ${bearbeitungId && bearbeitungKategorie === key ? 'text-amber-500 hover:text-amber-700 dark:hover:text-amber-400' : 'text-blue-500 hover:text-blue-700 dark:hover:text-blue-400'}`}>
-                          {bearbeitungId && bearbeitungKategorie === key ? 'Speichern' : '+ Hinzufügen'}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                </Fragment>
-              );
-            })()}
+            {renderKategorie('baustelle')}
+            {renderKategorie('erdarbeiten')}
+            {renderKategorie('vermessung')}
 
-            {/* Sonstiges (immer letzter Punkt vor Gesamtsumme) */}
-            {(() => {
-              const key = 'sonstiges' as const;
-              const positionen = kostenPositionen[key] ?? [];
-              const summe = positionen.reduce((s, p) => s + p.betrag, 0);
-              const form = neuForm[key] ?? LEER_FORM;
-              return (
-                <Fragment key={key}>
-                  <tr>
-                    <td className="px-6 py-3 font-medium text-gray-700 dark:text-gray-200">{KATEGORIEN_NAMEN[key]}</td>
-                    <td className="px-6 py-3 text-right text-gray-600 dark:text-gray-300">
-                      {summe > 0 ? (
-                        <span className="inline-flex items-center justify-end gap-2">
-                          <Ampel bezahlt={bezahltNachKategorie[KATEGORIEN_NAMEN[key]] ?? 0} gesamt={summe} />
-                          {formatEuro(summe)}
-                        </span>
-                      ) : <span className="text-gray-300 dark:text-gray-600">—</span>}
-                    </td>
-                  </tr>
-                  {positionen.map(pos => (
-                    <tr key={pos.id} className={bearbeitungId === pos.id ? 'bg-amber-50 dark:bg-amber-900/20' : ''}>
-                      <td className="px-6 py-1.5 pl-10 text-xs text-gray-500 dark:text-gray-400">
-                        {pos.menge && <span className="mr-1.5 text-gray-400">{pos.menge}×</span>}
-                        {pos.bezeichnung}
-                      </td>
-                      <td className="px-6 py-1.5 text-right text-xs text-gray-600 dark:text-gray-300">
-                        <span className="inline-flex items-center justify-end gap-2">
-                          <Ampel bezahlt={bezahltNachBeschreibung[pos.bezeichnung.trim().toLowerCase()] ?? 0} gesamt={pos.betrag} />
-                          {formatEuro(pos.betrag)}
-                        </span>
-                        <button onClick={() => bearbeitungStarten(pos)}
-                          className="ml-2 text-gray-300 hover:text-amber-500 transition-colors print:hidden" title="Bearbeiten">✎</button>
-                        <button onClick={() => positionLoeschen(pos.id, key)}
-                          className="ml-1 text-gray-300 hover:text-red-400 transition-colors print:hidden">×</button>
-                      </td>
-                    </tr>
-                  ))}
-                  <tr className="print:hidden">
-                    <td colSpan={2} className="px-6 pb-3 pl-10">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <input type="text" value={form.bezeichnung}
-                          onChange={e => setNeuForm(prev => ({ ...prev, [key]: { ...prev[key] ?? LEER_FORM, bezeichnung: e.target.value } }))}
-                          onKeyDown={e => e.key === 'Enter' && positionHinzufuegen(key)}
-                          placeholder="Bezeichnung"
-                          className="flex-1 min-w-40 text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
-                        <input type="text" value={form.menge}
-                          onChange={e => mengeEpAendern(key, 'menge', e.target.value)}
-                          onKeyDown={e => e.key === 'Enter' && positionHinzufuegen(key)}
-                          placeholder="Menge"
-                          className="w-16 text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
-                        <span className="text-xs text-gray-400">×</span>
-                        <input type="text" value={form.einzelpreis}
-                          onChange={e => mengeEpAendern(key, 'einzelpreis', e.target.value)}
-                          onKeyDown={e => e.key === 'Enter' && positionHinzufuegen(key)}
-                          placeholder="EP"
-                          className="w-24 text-right text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
-                        <span className="text-xs text-gray-400">€</span>
-                        {form.betrag && <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">= {form.betrag} €</span>}
-                        {bearbeitungId && bearbeitungKategorie === key && (
-                          <button onClick={bearbeitungAbbrechen}
-                            className="text-xs text-gray-500 dark:text-gray-400 px-2 py-1 rounded border border-gray-200 dark:border-gray-600 hover:border-gray-400 transition-colors whitespace-nowrap">
-                            Abbrechen
-                          </button>
-                        )}
-                        <button onClick={() => positionHinzufuegen(key)}
-                          disabled={!form.bezeichnung.trim() || (parseGermanNumber(form.betrag) ?? 0) <= 0}
-                          className={`text-xs disabled:text-gray-300 dark:disabled:text-gray-600 disabled:cursor-not-allowed transition-colors whitespace-nowrap ${bearbeitungId && bearbeitungKategorie === key ? 'text-amber-500 hover:text-amber-700 dark:hover:text-amber-400' : 'text-blue-500 hover:text-blue-700 dark:hover:text-blue-400'}`}>
-                          {bearbeitungId && bearbeitungKategorie === key ? 'Speichern' : '+ Hinzufügen'}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                </Fragment>
-              );
-            })()}
+            {/* ══ AUSSENANLAGEN ══ */}
+            <tr className="bg-gray-100 dark:bg-gray-700/80">
+              <td className="px-6 py-3 font-bold text-gray-800 dark:text-white text-sm tracking-wide">Außenanlagen</td>
+              <td className="px-6 py-3 text-right font-bold text-gray-800 dark:text-white">
+                {aussenanlagenGesamt > 0 ? formatEuro(aussenanlagenGesamt) : <span className="text-gray-400 font-normal text-xs">—</span>}
+              </td>
+            </tr>
+            {renderKategorie('aussenanlagen')}
+
+            {/* ══ WEITERE KOSTEN ══ */}
+            <tr className="bg-gray-100 dark:bg-gray-700/80">
+              <td className="px-6 py-3 font-bold text-gray-800 dark:text-white text-sm tracking-wide">Weitere Kosten</td>
+              <td className="px-6 py-3 text-right font-bold text-gray-800 dark:text-white">
+                {weitereKostenGesamt > 0 ? formatEuro(weitereKostenGesamt) : <span className="text-gray-400 font-normal text-xs">—</span>}
+              </td>
+            </tr>
+            {renderKategorie('kueche')}
+            {renderMengeEpKategorie('maschinen')}
+            {renderMengeEpKategorie('sonstiges')}
 
             {/* Gesamtsumme */}
             <tr className="bg-gray-900 dark:bg-gray-950 print:bg-gray-100">
               <td className="px-6 py-5 font-bold text-white print:text-gray-900 text-base">
                 Gesamtfinanzierungsbedarf
-                <div className="text-xs font-normal text-gray-400 mt-0.5">Hauskosten + Materialkosten + Weitere Kosten</div>
+                <div className="text-xs font-normal text-gray-400 mt-0.5">Hauskosten + Materialkosten + Baunebenkosten + Außenanlagen + Weitere Kosten</div>
               </td>
               <td className="px-6 py-5 text-right font-bold text-white print:text-gray-900 text-xl">
                 {formatEuro(gesamtFinanzierung)}
