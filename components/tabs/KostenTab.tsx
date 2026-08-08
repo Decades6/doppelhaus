@@ -296,10 +296,12 @@ export default function KostenTab() {
     const form = neuForm[key] ?? LEER_FORM;
     const vorhandeneGruppen = [...new Set(pos.map(p => p.unterkategorie).filter(Boolean) as string[])];
     const ohneGruppe = pos.filter(p => !p.unterkategorie);
+    const hatGruppen = vorhandeneGruppen.length > 0;
+    const ohneGruppeSumme = ohneGruppe.reduce((s, p) => s + p.betrag, 0);
 
-    const renderPosition = (p: KostenPosition, extraIndent = false) => (
+    const renderPosition = (p: KostenPosition) => (
       <tr key={p.id} className={bearbeitungId === p.id ? 'bg-amber-50 dark:bg-amber-900/20' : ''}>
-        <td className={`px-6 py-1.5 text-xs text-gray-500 dark:text-gray-400 ${extraIndent ? 'pl-20' : 'pl-14'}`}>{p.bezeichnung}</td>
+        <td className="px-6 py-1.5 pl-14 text-xs text-gray-500 dark:text-gray-400">{p.bezeichnung}</td>
         <td className="px-6 py-1.5 text-right text-xs text-gray-600 dark:text-gray-300">
           <span className="inline-flex items-center justify-end gap-2">
             <Ampel bezahlt={bezahltNachBeschreibung[p.bezeichnung.trim().toLowerCase()] ?? 0} gesamt={p.betrag} />
@@ -313,39 +315,44 @@ export default function KostenTab() {
 
     return (
       <Fragment key={key}>
-        <tr>
-          <td className="px-6 py-2.5 pl-8 font-medium text-sm text-gray-700 dark:text-gray-200">{KATEGORIEN_NAMEN[key]}</td>
-          <td className="px-6 py-2.5 text-right text-gray-600 dark:text-gray-300">
-            {summe > 0 ? (
-              <span className="inline-flex items-center justify-end gap-2">
-                <Ampel bezahlt={bezahltNachKategorie[KATEGORIEN_NAMEN[key]] ?? 0} gesamt={summe} />
-                {formatEuro(summe)}
-              </span>
-            ) : <span className="text-gray-300 dark:text-gray-600">—</span>}
-          </td>
-        </tr>
+        {/* Kategorie-Zeile: zeigt ungrouped-Summe wenn Gruppen vorhanden, sonst Gesamt */}
+        {(!hatGruppen || ohneGruppe.length > 0) && (
+          <tr>
+            <td className="px-6 py-2.5 pl-8 font-medium text-sm text-gray-700 dark:text-gray-200">{KATEGORIEN_NAMEN[key]}</td>
+            <td className="px-6 py-2.5 text-right text-gray-600 dark:text-gray-300">
+              {(hatGruppen ? ohneGruppeSumme : summe) > 0 ? (
+                <span className="inline-flex items-center justify-end gap-2">
+                  <Ampel bezahlt={bezahltNachKategorie[KATEGORIEN_NAMEN[key]] ?? 0} gesamt={hatGruppen ? ohneGruppeSumme : summe} />
+                  {formatEuro(hatGruppen ? ohneGruppeSumme : summe)}
+                </span>
+              ) : <span className="text-gray-300 dark:text-gray-600">—</span>}
+            </td>
+          </tr>
+        )}
 
         {/* Einträge ohne Gruppe */}
         {ohneGruppe.map(p => renderPosition(p))}
 
-        {/* Gruppen mit Einträgen */}
+        {/* Gruppen auf gleicher Ebene wie Kategorie-Zeile */}
         {vorhandeneGruppen.map(gruppe => {
           const gruppenPos = pos.filter(p => p.unterkategorie === gruppe);
           const gruppenSumme = gruppenPos.reduce((s, p) => s + p.betrag, 0);
           return (
             <Fragment key={gruppe}>
               <tr>
-                <td className="px-6 py-1.5 pl-11 text-xs font-semibold text-gray-600 dark:text-gray-300 italic">{gruppe}</td>
-                <td className="px-6 py-1.5 text-right text-xs text-gray-500 dark:text-gray-400">{formatEuro(gruppenSumme)}</td>
+                <td className="px-6 py-2.5 pl-8 font-medium text-sm text-gray-700 dark:text-gray-200">{gruppe}</td>
+                <td className="px-6 py-2.5 text-right text-gray-600 dark:text-gray-300">
+                  {gruppenSumme > 0 ? formatEuro(gruppenSumme) : <span className="text-gray-300 dark:text-gray-600">—</span>}
+                </td>
               </tr>
-              {gruppenPos.map(p => renderPosition(p, true))}
+              {gruppenPos.map(p => renderPosition(p))}
             </Fragment>
           );
         })}
 
         {/* Formular */}
         <tr className="print:hidden">
-          <td colSpan={2} className="px-6 pb-2.5 pl-14">
+          <td colSpan={2} className="px-6 pb-2.5 pl-8">
             <div className="flex items-center gap-2 flex-wrap">
               <input type="text" value={form.bezeichnung}
                 onChange={e => setNeuForm(prev => ({ ...prev, [key]: { ...prev[key] ?? LEER_FORM, bezeichnung: e.target.value } }))}
@@ -356,7 +363,7 @@ export default function KostenTab() {
                 list={`gruppen-${key}`}
                 onChange={e => setNeuForm(prev => ({ ...prev, [key]: { ...prev[key] ?? LEER_FORM, unterkategorie: e.target.value } }))}
                 onKeyDown={e => e.key === 'Enter' && positionHinzufuegen(key)}
-                placeholder="Gruppe (optional)"
+                placeholder="Kategorie (optional)"
                 className="w-36 text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
               <datalist id={`gruppen-${key}`}>
                 {vorhandeneGruppen.map(g => <option key={g} value={g} />)}
