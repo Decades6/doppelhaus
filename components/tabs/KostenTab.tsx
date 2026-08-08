@@ -83,7 +83,7 @@ export default function KostenTab() {
   const [anschluesse, setAnschluesse] = useState<AnschlussKosten>(LEER_ANSCHLUESSE);
   const [anschlussEingaben, setAnschlussEingaben] = useState<Record<string, string>>({});
   const [kostenPositionen, setKostenPositionen] = useState<Record<string, KostenPosition[]>>({});
-  const [neuForm, setNeuForm] = useState<Record<string, { bezeichnung: string; betrag: string; menge: string; einzelpreis: string }>>({});
+  const [neuForm, setNeuForm] = useState<Record<string, { bezeichnung: string; betrag: string; menge: string; einzelpreis: string; unterkategorie: string }>>({});
   const [materialDetails, setMaterialDetails] = useState<Record<string, EigenleistungMaterial[]>>({});
   const [aufgeklappteGewerke, setAufgeklappteGewerke] = useState<Set<string>>(new Set());
   const [laden, setLaden] = useState(true);
