@@ -51,6 +51,7 @@ interface KostenPosition {
   bezeichnung: string;
   betrag: number;
   menge?: string | null;
+  unterkategorie?: string | null;
 }
 
 interface EigenleistungGewerk {
@@ -66,7 +67,7 @@ interface MaterialGewerk {
 }
 
 
-const LEER_FORM = { bezeichnung: '', betrag: '', menge: '', einzelpreis: '' };
+const LEER_FORM = { bezeichnung: '', betrag: '', menge: '', einzelpreis: '', unterkategorie: '' };
 
 function Ampel({ bezahlt, gesamt }: { bezahlt: number; gesamt: number }) {
   if (gesamt <= 0) return null;
@@ -139,7 +140,7 @@ export default function KostenTab() {
 
     const [{ data: anschlussRows }, { data: positionen }, { data: z }] = await Promise.all([
       supabase.from('kosten_manuell').select('schluessel, betrag'),
-      supabase.from('kosten_positionen').select('id, kategorie, bezeichnung, betrag, menge').order('created_at', { ascending: true }),
+      supabase.from('kosten_positionen').select('id, kategorie, bezeichnung, betrag, menge, unterkategorie').order('created_at', { ascending: true }),
       supabase.from('zahlungen').select('beschreibung, kategorie, betrag'),
     ]);
 
@@ -204,7 +205,7 @@ export default function KostenTab() {
       : '';
     setNeuForm(prev => ({
       ...prev,
-      [pos.kategorie]: { bezeichnung: pos.bezeichnung, betrag: formatGermanNumber(pos.betrag), menge, einzelpreis },
+      [pos.kategorie]: { bezeichnung: pos.bezeichnung, betrag: formatGermanNumber(pos.betrag), menge, einzelpreis, unterkategorie: pos.unterkategorie ?? '' },
     }));
   }
 
@@ -236,6 +237,7 @@ export default function KostenTab() {
     if (betrag <= 0) return;
 
     const menge = f.menge?.trim() || null;
+    const unterkategorie = f.unterkategorie?.trim() || null;
 
     if (bearbeitungId) {
       const idZuAktualisieren = bearbeitungId;
@@ -244,9 +246,9 @@ export default function KostenTab() {
       setNeuForm(prev => ({ ...prev, [kategorie]: LEER_FORM }));
       const { data, error } = await supabase
         .from('kosten_positionen')
-        .update({ bezeichnung: f.bezeichnung.trim(), betrag, menge })
+        .update({ bezeichnung: f.bezeichnung.trim(), betrag, menge, unterkategorie })
         .eq('id', idZuAktualisieren)
-        .select('id, kategorie, bezeichnung, betrag, menge').single();
+        .select('id, kategorie, bezeichnung, betrag, menge, unterkategorie').single();
       if (!error && data) {
         setKostenPositionen(prev => ({
           ...prev,
@@ -259,7 +261,7 @@ export default function KostenTab() {
       const { data: { user } } = await supabase.auth.getUser();
       const { data, error } = await supabase
         .from('kosten_positionen')
-        .insert({ user_id: user?.id, kategorie, bezeichnung: f.bezeichnung.trim(), betrag, menge })
+        .insert({ user_id: user?.id, kategorie, bezeichnung: f.bezeichnung.trim(), betrag, menge, unterkategorie })
         .select().single();
 
       if (!error && data) {
@@ -292,6 +294,23 @@ export default function KostenTab() {
     const pos = kostenPositionen[key] ?? [];
     const summe = pos.reduce((s, p) => s + p.betrag, 0);
     const form = neuForm[key] ?? LEER_FORM;
+    const vorhandeneGruppen = [...new Set(pos.map(p => p.unterkategorie).filter(Boolean) as string[])];
+    const ohneGruppe = pos.filter(p => !p.unterkategorie);
+
+    const renderPosition = (p: KostenPosition, extraIndent = false) => (
+      <tr key={p.id} className={bearbeitungId === p.id ? 'bg-amber-50 dark:bg-amber-900/20' : ''}>
+        <td className={`px-6 py-1.5 text-xs text-gray-500 dark:text-gray-400 ${extraIndent ? 'pl-20' : 'pl-14'}`}>{p.bezeichnung}</td>
+        <td className="px-6 py-1.5 text-right text-xs text-gray-600 dark:text-gray-300">
+          <span className="inline-flex items-center justify-end gap-2">
+            <Ampel bezahlt={bezahltNachBeschreibung[p.bezeichnung.trim().toLowerCase()] ?? 0} gesamt={p.betrag} />
+            {formatEuro(p.betrag)}
+          </span>
+          <button onClick={() => bearbeitungStarten(p)} className="ml-2 text-gray-300 hover:text-amber-500 transition-colors print:hidden" title="Bearbeiten">✎</button>
+          <button onClick={() => positionLoeschen(p.id, key)} className="ml-1 text-gray-300 hover:text-red-400 transition-colors print:hidden">×</button>
+        </td>
+      </tr>
+    );
+
     return (
       <Fragment key={key}>
         <tr>
@@ -305,32 +324,48 @@ export default function KostenTab() {
             ) : <span className="text-gray-300 dark:text-gray-600">—</span>}
           </td>
         </tr>
-        {pos.map(p => (
-          <tr key={p.id} className={bearbeitungId === p.id ? 'bg-amber-50 dark:bg-amber-900/20' : ''}>
-            <td className="px-6 py-1.5 pl-14 text-xs text-gray-500 dark:text-gray-400">{p.bezeichnung}</td>
-            <td className="px-6 py-1.5 text-right text-xs text-gray-600 dark:text-gray-300">
-              <span className="inline-flex items-center justify-end gap-2">
-                <Ampel bezahlt={bezahltNachBeschreibung[p.bezeichnung.trim().toLowerCase()] ?? 0} gesamt={p.betrag} />
-                {formatEuro(p.betrag)}
-              </span>
-              <button onClick={() => bearbeitungStarten(p)} className="ml-2 text-gray-300 hover:text-amber-500 transition-colors print:hidden" title="Bearbeiten">✎</button>
-              <button onClick={() => positionLoeschen(p.id, key)} className="ml-1 text-gray-300 hover:text-red-400 transition-colors print:hidden">×</button>
-            </td>
-          </tr>
-        ))}
+
+        {/* Einträge ohne Gruppe */}
+        {ohneGruppe.map(p => renderPosition(p))}
+
+        {/* Gruppen mit Einträgen */}
+        {vorhandeneGruppen.map(gruppe => {
+          const gruppenPos = pos.filter(p => p.unterkategorie === gruppe);
+          const gruppenSumme = gruppenPos.reduce((s, p) => s + p.betrag, 0);
+          return (
+            <Fragment key={gruppe}>
+              <tr>
+                <td className="px-6 py-1.5 pl-11 text-xs font-semibold text-gray-600 dark:text-gray-300 italic">{gruppe}</td>
+                <td className="px-6 py-1.5 text-right text-xs text-gray-500 dark:text-gray-400">{formatEuro(gruppenSumme)}</td>
+              </tr>
+              {gruppenPos.map(p => renderPosition(p, true))}
+            </Fragment>
+          );
+        })}
+
+        {/* Formular */}
         <tr className="print:hidden">
           <td colSpan={2} className="px-6 pb-2.5 pl-14">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <input type="text" value={form.bezeichnung}
                 onChange={e => setNeuForm(prev => ({ ...prev, [key]: { ...prev[key] ?? LEER_FORM, bezeichnung: e.target.value } }))}
                 onKeyDown={e => e.key === 'Enter' && positionHinzufuegen(key)}
                 placeholder="Bezeichnung"
-                className="flex-1 text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
+                className="flex-1 min-w-32 text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
+              <input type="text" value={form.unterkategorie}
+                list={`gruppen-${key}`}
+                onChange={e => setNeuForm(prev => ({ ...prev, [key]: { ...prev[key] ?? LEER_FORM, unterkategorie: e.target.value } }))}
+                onKeyDown={e => e.key === 'Enter' && positionHinzufuegen(key)}
+                placeholder="Gruppe (optional)"
+                className="w-36 text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
+              <datalist id={`gruppen-${key}`}>
+                {vorhandeneGruppen.map(g => <option key={g} value={g} />)}
+              </datalist>
               <input type="text" value={form.betrag}
                 onChange={e => setNeuForm(prev => ({ ...prev, [key]: { ...prev[key] ?? LEER_FORM, betrag: e.target.value } }))}
                 onKeyDown={e => e.key === 'Enter' && positionHinzufuegen(key)}
                 placeholder="0,00"
-                className="w-28 text-right text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
+                className="w-24 text-right text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
               <span className="text-xs text-gray-400">€</span>
               {bearbeitungId && bearbeitungKategorie === key && (
                 <button onClick={bearbeitungAbbrechen} className="text-xs text-gray-500 dark:text-gray-400 px-2 py-1 rounded border border-gray-200 dark:border-gray-600 hover:border-gray-400 transition-colors whitespace-nowrap">Abbrechen</button>
