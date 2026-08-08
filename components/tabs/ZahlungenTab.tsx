@@ -247,8 +247,16 @@ export default function ZahlungenTab() {
             <label className="text-xs text-gray-400 mb-1 block">Beschreibung</label>
             <input type="text" value={form.beschreibung} onChange={e => setForm(p => ({ ...p, beschreibung: e.target.value }))}
               onKeyDown={e => e.key === 'Enter' && hinzufuegen()}
+              list="beschreibung-vorschlaege"
               placeholder="z.B. Abschlagsrechnung 1"
               className="w-full text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100" />
+            <datalist id="beschreibung-vorschlaege">
+              {[...new Set([
+                ...zahlungen.map(z => z.beschreibung),
+                ...kostenVorlagen.map(v => v.bezeichnung),
+                ...eigenleistungVorlagen.map(e => e.bezeichnung),
+              ])].sort().map(v => <option key={v} value={v} />)}
+            </datalist>
           </div>
           <div>
             <label className="text-xs text-gray-400 mb-1 block">Kategorie</label>
