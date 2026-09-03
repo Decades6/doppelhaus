@@ -10,6 +10,17 @@ export default function LoginPage() {
   const [passwort, setPasswort] = useState('');
   const [fehler, setFehler] = useState('');
   const [laden, setLaden] = useState(false);
+  const [resetGesendet, setResetGesendet] = useState(false);
+  const [resetLaden, setResetLaden] = useState(false);
+
+  async function handleReset() {
+    if (!email) { setFehler('Bitte zuerst E-Mail eingeben.'); return; }
+    setResetLaden(true);
+    setFehler('');
+    await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${window.location.origin}/reset-password` });
+    setResetLaden(false);
+    setResetGesendet(true);
+  }
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -79,6 +90,21 @@ export default function LoginPage() {
           >
             {laden ? 'Wird angemeldet...' : 'Anmelden'}
           </button>
+
+          {resetGesendet ? (
+            <p className="text-center text-sm text-green-600 dark:text-green-400">
+              Reset-Link gesendet — bitte E-Mail prüfen.
+            </p>
+          ) : (
+            <button
+              type="button"
+              onClick={handleReset}
+              disabled={resetLaden}
+              className="w-full text-sm text-gray-400 hover:text-blue-500 dark:hover:text-blue-400 transition-colors disabled:opacity-50"
+            >
+              {resetLaden ? '...' : 'Passwort vergessen?'}
+            </button>
+          )}
         </form>
       </div>
     </div>
