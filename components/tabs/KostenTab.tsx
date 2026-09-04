@@ -24,7 +24,7 @@ const ANSCHLUSS_NAMEN: Record<keyof AnschlussKosten, string> = {
   telekomanschluss: 'Telekomanschluss',
 };
 
-const KATEGORIEN = ['planung', 'versicherungen', 'nebenkosten', 'notar', 'baustelle', 'erdarbeiten', 'vermessung', 'aussenanlagen', 'abriss', 'kueche', 'maschinen', 'sonstiges'] as const;
+const KATEGORIEN = ['planung', 'versicherungen', 'nebenkosten', 'notar', 'baustelle', 'erdarbeiten', 'vermessung', 'aussenanlagen', 'kueche', 'maschinen', 'sonstiges'] as const;
 type Kategorie = typeof KATEGORIEN[number];
 
 const KATEGORIEN_NAMEN: Record<Kategorie, string> = {
@@ -36,14 +36,13 @@ const KATEGORIEN_NAMEN: Record<Kategorie, string> = {
   erdarbeiten: 'Erdarbeiten',
   vermessung: 'Vermessung',
   aussenanlagen: 'Außenanlagen',
-  abriss: 'Abriss',
   kueche: 'Küche',
   maschinen: 'Maschinen und Werkzeug',
   sonstiges: 'Sonstiges',
 };
 
 const BAUNEBENKOSTEN_KEYS: readonly Kategorie[] = ['planung', 'versicherungen', 'nebenkosten', 'notar', 'baustelle', 'erdarbeiten', 'vermessung'];
-const WEITERE_KOSTEN_KEYS: readonly Kategorie[] = ['abriss', 'kueche', 'maschinen', 'sonstiges'];
+const WEITERE_KOSTEN_KEYS: readonly Kategorie[] = ['kueche', 'maschinen', 'sonstiges'];
 
 interface KostenPosition {
   id: string;
@@ -780,7 +779,6 @@ export default function KostenTab() {
                 {weitereKostenGesamt > 0 ? formatEuro(weitereKostenGesamt) : <span className="text-gray-400 font-normal text-xs">—</span>}
               </td>
             </tr>
-            {renderKategorie('abriss')}
             {renderKategorie('kueche')}
             {renderMengeEpKategorie('maschinen')}
             {renderMengeEpKategorie('sonstiges')}
