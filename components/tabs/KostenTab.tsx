@@ -24,10 +24,10 @@ const ANSCHLUSS_NAMEN: Record<keyof AnschlussKosten, string> = {
   telekomanschluss: 'Telekomanschluss',
 };
 
-const KATEGORIEN = ['planung', 'versicherungen', 'nebenkosten', 'notar', 'baustelle', 'erdarbeiten', 'vermessung', 'aussenanlagen', 'kueche', 'maschinen', 'sonstiges'] as const;
-type Kategorie = typeof KATEGORIEN[number];
+export const KATEGORIEN = ['planung', 'versicherungen', 'nebenkosten', 'notar', 'baustelle', 'erdarbeiten', 'vermessung', 'aussenanlagen', 'kueche', 'maschinen', 'sonstiges'] as const;
+export type Kategorie = typeof KATEGORIEN[number];
 
-const KATEGORIEN_NAMEN: Record<Kategorie, string> = {
+export const KATEGORIEN_NAMEN: Record<Kategorie, string> = {
   planung: 'Planung & Genehmigung',
   versicherungen: 'Versicherungen',
   nebenkosten: 'Erschließung & Abgaben',

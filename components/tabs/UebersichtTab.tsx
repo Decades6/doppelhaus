@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { formatEuro } from '@/lib/utils';
+import { KATEGORIEN_NAMEN } from '@/components/tabs/KostenTab';
 
 interface KostenKategorie {
   name: string;
@@ -25,21 +26,17 @@ interface UebersichtDaten {
 type TabId = 'uebersicht' | 'angebot' | 'eigenleistungen' | 'kosten' | 'zahlungen';
 
 const KOSTEN_FARBEN: Record<string, string> = {
-  nebenkosten: 'bg-indigo-500',
-  notar:       'bg-purple-500',
-  vermessung:  'bg-teal-500',
-  erdarbeiten: 'bg-orange-500',
-  kueche:      'bg-pink-500',
-  sonstiges:   'bg-gray-400',
-};
-
-const KOSTEN_NAMEN: Record<string, string> = {
-  nebenkosten: 'Nebenkosten',
-  notar:       'Notar',
-  vermessung:  'Vermessung',
-  erdarbeiten: 'Erdarbeiten',
-  kueche:      'Küche',
-  sonstiges:   'Sonstiges',
+  planung:        'bg-lime-500',
+  versicherungen: 'bg-yellow-500',
+  nebenkosten:    'bg-indigo-500',
+  notar:          'bg-purple-500',
+  baustelle:      'bg-rose-500',
+  erdarbeiten:    'bg-orange-500',
+  vermessung:     'bg-teal-500',
+  aussenanlagen:  'bg-lime-700',
+  kueche:         'bg-pink-500',
+  maschinen:      'bg-slate-500',
+  sonstiges:      'bg-gray-400',
 };
 
 export default function UebersichtTab({ onTabWechsel }: { onTabWechsel: (tab: TabId) => void }) {
@@ -124,7 +121,7 @@ export default function UebersichtTab({ onTabWechsel }: { onTabWechsel: (tab: Ta
     { name: 'Materialkosten', betrag: daten.materialkosten,   farbe: 'bg-amber-500' },
     { name: 'Anschlüsse',    betrag: daten.anschluesseGesamt, farbe: 'bg-cyan-500' },
     ...Object.entries(daten.kostenNachKategorie)
-      .map(([kat, betrag]) => ({ name: KOSTEN_NAMEN[kat] ?? kat, betrag, farbe: KOSTEN_FARBEN[kat] ?? 'bg-gray-400' })),
+      .map(([kat, betrag]) => ({ name: KATEGORIEN_NAMEN[kat as keyof typeof KATEGORIEN_NAMEN] ?? kat, betrag, farbe: KOSTEN_FARBEN[kat] ?? 'bg-gray-400' })),
   ].filter(k => k.betrag > 0);
 
   return (
