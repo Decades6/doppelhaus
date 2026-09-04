@@ -30,6 +30,12 @@ export default function EigenleistungenTab() {
   const [gewerkLoeschenLaden, setGewerkLoeschenLaden] = useState<string | null>(null);
   const [speicherFehler, setSpeicherFehler] = useState('');
   const [speicherFehlerGewerk, setSpeicherFehlerGewerk] = useState<string | null>(null);
+  const [editBezeichnung, setEditBezeichnung] = useState('');
+  const [editMenge, setEditMenge] = useState('');
+  const [editEinheit, setEditEinheit] = useState('Stk.');
+  const [editEinzelpreis, setEditEinzelpreis] = useState('');
+  const [editGesamtpreis, setEditGesamtpreis] = useState('');
+  const [editZeitaufwand, setEditZeitaufwand] = useState('');
 
   useEffect(() => { ladeDaten(); }, []);
 
@@ -72,25 +78,84 @@ export default function EigenleistungenTab() {
     setBearbeitungGewerk(gewerk);
     setSpeicherFehler('');
     setSpeicherFehlerGewerk(null);
-    setFormulare(prev => ({
-      ...prev,
-      [gewerk]: {
-        bezeichnung: m.bezeichnung,
-        menge: m.menge != null ? String(m.menge).replace('.', ',') : '',
-        einheit: m.einheit ?? 'Stk.',
-        einzelpreis: m.einzelpreis != null ? String(m.einzelpreis).replace('.', ',') : '',
-        gesamtpreis: String(m.gesamtpreis).replace('.', ','),
-        zeitaufwand_stunden: m.zeitaufwand_stunden != null ? String(m.zeitaufwand_stunden).replace('.', ',') : '',
-      },
-    }));
+    setEditBezeichnung(m.bezeichnung);
+    setEditMenge(m.menge != null ? String(m.menge).replace('.', ',') : '');
+    setEditEinheit(m.einheit ?? 'Stk.');
+    setEditEinzelpreis(m.einzelpreis != null ? String(m.einzelpreis).replace('.', ',') : '');
+    setEditGesamtpreis(String(m.gesamtpreis).replace('.', ','));
+    setEditZeitaufwand(m.zeitaufwand_stunden != null ? String(m.zeitaufwand_stunden).replace('.', ',') : '');
+  }
+
+  function editFormularAendern(feld: keyof NeuesFormular, wert: string) {
+    if (feld === 'bezeichnung') setEditBezeichnung(wert);
+    if (feld === 'einheit') setEditEinheit(wert);
+    if (feld === 'zeitaufwand_stunden') setEditZeitaufwand(wert);
+    if (feld === 'gesamtpreis') setEditGesamtpreis(wert);
+    if (feld === 'menge' || feld === 'einzelpreis') {
+      const neueMenge = feld === 'menge' ? wert : editMenge;
+      const neuerEp = feld === 'einzelpreis' ? wert : editEinzelpreis;
+      if (feld === 'menge') setEditMenge(wert); else setEditEinzelpreis(wert);
+      const m = parseFloat(neueMenge.replace(',', '.'));
+      const ep = parseFloat(neuerEp.replace(',', '.'));
+      if (!isNaN(m) && !isNaN(ep)) setEditGesamtpreis((m * ep).toFixed(2).replace('.', ','));
+    }
   }
 
   function bearbeitungAbbrechen() {
-    if (bearbeitungGewerk) setFormulare(prev => ({ ...prev, [bearbeitungGewerk]: { ...LEER } }));
     setBearbeitungId(null);
     setBearbeitungGewerk(null);
     setSpeicherFehler('');
     setSpeicherFehlerGewerk(null);
+  }
+
+  async function materialAktualisieren() {
+    if (!bearbeitungId || !bearbeitungGewerk) return;
+    if (!editBezeichnung.trim()) return;
+    const gp = parseFloat(editGesamtpreis.replace(',', '.'));
+    if (isNaN(gp) || gp < 0) return;
+
+    const gewerk = bearbeitungGewerk;
+    const id = bearbeitungId;
+    const zeitaufwand = editZeitaufwand ? parseFloat(editZeitaufwand.replace(',', '.')) : null;
+
+    setSpeichernLaden(gewerk);
+    setSpeicherFehler('');
+    setSpeicherFehlerGewerk(null);
+
+    const update = {
+      bezeichnung: editBezeichnung.trim(),
+      menge: editMenge ? parseFloat(editMenge.replace(',', '.')) : null,
+      einheit: editEinheit || null,
+      einzelpreis: editEinzelpreis ? parseFloat(editEinzelpreis.replace(',', '.')) : null,
+      gesamtpreis: gp,
+      zeitaufwand_stunden: zeitaufwand && !isNaN(zeitaufwand) ? zeitaufwand : null,
+    };
+
+    const { data, error } = await supabase
+      .from('eigenleistung_materialien')
+      .update(update)
+      .eq('id', id)
+      .select()
+      .maybeSingle();
+
+    setSpeichernLaden(null);
+
+    if (error) {
+      console.error('Material speichern fehlgeschlagen:', error);
+      setSpeicherFehler(error.message || 'Speichern fehlgeschlagen.');
+      setSpeicherFehlerGewerk(gewerk);
+      return;
+    }
+    if (!data) {
+      console.error('Material speichern: Update betraf 0 Zeilen (vermutlich RLS-Berechtigung) für id', id);
+      setSpeicherFehler('Speichern fehlgeschlagen: keine Berechtigung, diesen Eintrag zu ändern.');
+      setSpeicherFehlerGewerk(gewerk);
+      return;
+    }
+
+    setMaterialien(prev => prev.map(m => m.id === id ? (data as EigenleistungMaterial) : m));
+    setBearbeitungId(null);
+    setBearbeitungGewerk(null);
   }
 
   async function materialHinzufuegen(gewerk: string) {
@@ -105,51 +170,19 @@ export default function EigenleistungenTab() {
 
     const zeitaufwand = f.zeitaufwand_stunden ? parseFloat(f.zeitaufwand_stunden.replace(',', '.')) : null;
 
-    if (bearbeitungId) {
-      const update = {
-        bezeichnung: f.bezeichnung.trim(),
-        menge: f.menge ? parseFloat(f.menge.replace(',', '.')) : null,
-        einheit: f.einheit || null,
-        einzelpreis: f.einzelpreis ? parseFloat(f.einzelpreis.replace(',', '.')) : null,
-        gesamtpreis: gp,
-        zeitaufwand_stunden: zeitaufwand && !isNaN(zeitaufwand) ? zeitaufwand : null,
-      };
-      const { data, error } = await supabase
-        .from('eigenleistung_materialien')
-        .update(update)
-        .eq('id', bearbeitungId)
-        .select()
-        .maybeSingle();
+    const { data: { user } } = await supabase.auth.getUser();
+    const { data, error } = await supabase
+      .from('eigenleistung_materialien')
+      .insert({ user_id: user?.id, gewerk, bezeichnung: f.bezeichnung.trim(), menge: f.menge ? parseFloat(f.menge.replace(',', '.')) : null, einheit: f.einheit || null, einzelpreis: f.einzelpreis ? parseFloat(f.einzelpreis.replace(',', '.')) : null, gesamtpreis: gp, zeitaufwand_stunden: zeitaufwand && !isNaN(zeitaufwand) ? zeitaufwand : null })
+      .select().single();
 
-      if (error) {
-        console.error('Material speichern fehlgeschlagen:', error);
-        setSpeicherFehler(error.message || 'Speichern fehlgeschlagen.');
-        setSpeicherFehlerGewerk(gewerk);
-      } else if (!data) {
-        console.error('Material speichern: Update betraf 0 Zeilen (vermutlich RLS-Berechtigung) für id', bearbeitungId);
-        setSpeicherFehler('Speichern fehlgeschlagen: keine Berechtigung, diesen Eintrag zu ändern.');
-        setSpeicherFehlerGewerk(gewerk);
-      } else {
-        setMaterialien(prev => prev.map(m => m.id === bearbeitungId ? (data as EigenleistungMaterial) : m));
-        setFormulare(prev => ({ ...prev, [gewerk]: { ...LEER } }));
-        setBearbeitungId(null);
-        setBearbeitungGewerk(null);
-      }
-    } else {
-      const { data: { user } } = await supabase.auth.getUser();
-      const { data, error } = await supabase
-        .from('eigenleistung_materialien')
-        .insert({ user_id: user?.id, gewerk, bezeichnung: f.bezeichnung.trim(), menge: f.menge ? parseFloat(f.menge.replace(',', '.')) : null, einheit: f.einheit || null, einzelpreis: f.einzelpreis ? parseFloat(f.einzelpreis.replace(',', '.')) : null, gesamtpreis: gp, zeitaufwand_stunden: zeitaufwand && !isNaN(zeitaufwand) ? zeitaufwand : null })
-        .select().single();
-
-      if (error) {
-        console.error('Material anlegen fehlgeschlagen:', error);
-        setSpeicherFehler(error.message || 'Speichern fehlgeschlagen.');
-        setSpeicherFehlerGewerk(gewerk);
-      } else if (data) {
-        setMaterialien(prev => [...prev, data as EigenleistungMaterial]);
-        setFormulare(prev => ({ ...prev, [gewerk]: { ...LEER } }));
-      }
+    if (error) {
+      console.error('Material anlegen fehlgeschlagen:', error);
+      setSpeicherFehler(error.message || 'Speichern fehlgeschlagen.');
+      setSpeicherFehlerGewerk(gewerk);
+    } else if (data) {
+      setMaterialien(prev => [...prev, data as EigenleistungMaterial]);
+      setFormulare(prev => ({ ...prev, [gewerk]: { ...LEER } }));
     }
 
     setSpeichernLaden(null);
@@ -270,20 +303,68 @@ export default function EigenleistungenTab() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
-                        {freiEigenleistungen.map(m => (
-                          <tr key={m.id} className={`hover:bg-gray-50 dark:hover:bg-gray-700/50 ${bearbeitungId === m.id ? 'bg-amber-50 dark:bg-amber-900/20' : ''}`}>
-                            <td className="px-4 py-2 text-gray-800 dark:text-gray-200">{m.bezeichnung}</td>
-                            <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-300">{m.menge ?? '–'}</td>
-                            <td className="px-4 py-2 text-gray-500 dark:text-gray-400">{m.einheit ?? '–'}</td>
-                            <td className="px-4 py-2 text-right text-purple-600 dark:text-purple-400">{m.zeitaufwand_stunden != null ? `${m.zeitaufwand_stunden} h` : '–'}</td>
-                            <td className="px-4 py-2 text-right text-gray-500 dark:text-gray-400">{m.einzelpreis != null ? formatEuro(m.einzelpreis) : '–'}</td>
-                            <td className="px-4 py-2 text-right font-medium text-orange-600 dark:text-orange-400">{formatEuro(m.gesamtpreis)}</td>
-                            <td className="px-4 py-2 text-center whitespace-nowrap">
-                              <button onClick={() => bearbeitungStarten('__frei__', m)} className="text-gray-300 hover:text-amber-500 transition-colors mr-1" title="Bearbeiten">✎</button>
-                              <button onClick={() => materialLoeschen(m.id)} className="text-gray-300 hover:text-red-400 transition-colors text-lg leading-none">×</button>
-                            </td>
-                          </tr>
-                        ))}
+                        {freiEigenleistungen.map(m => {
+                          if (bearbeitungId === m.id) {
+                            return (
+                              <tr key={m.id} className="bg-amber-50 dark:bg-amber-900/20">
+                                <td colSpan={7} className="px-4 py-2">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <input value={editBezeichnung} onChange={e => editFormularAendern('bezeichnung', e.target.value)}
+                                      onKeyDown={e => e.key === 'Enter' && materialAktualisieren()}
+                                      placeholder="Bezeichnung"
+                                      className="flex-1 min-w-32 text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-amber-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100" />
+                                    <input value={editMenge} onChange={e => editFormularAendern('menge', e.target.value)}
+                                      onKeyDown={e => e.key === 'Enter' && materialAktualisieren()}
+                                      placeholder="Menge"
+                                      className="w-16 text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-amber-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100" />
+                                    <input value={editEinheit} onChange={e => editFormularAendern('einheit', e.target.value)}
+                                      onKeyDown={e => e.key === 'Enter' && materialAktualisieren()}
+                                      placeholder="Einheit"
+                                      className="w-16 text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-amber-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100" />
+                                    <input value={editZeitaufwand} onChange={e => editFormularAendern('zeitaufwand_stunden', e.target.value)}
+                                      onKeyDown={e => e.key === 'Enter' && materialAktualisieren()}
+                                      placeholder="Std."
+                                      className="w-16 text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-amber-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100" />
+                                    <input value={editEinzelpreis} onChange={e => editFormularAendern('einzelpreis', e.target.value)}
+                                      onKeyDown={e => e.key === 'Enter' && materialAktualisieren()}
+                                      placeholder="EP"
+                                      className="w-20 text-right text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-amber-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100" />
+                                    <input value={editGesamtpreis} onChange={e => editFormularAendern('gesamtpreis', e.target.value)}
+                                      onKeyDown={e => e.key === 'Enter' && materialAktualisieren()}
+                                      placeholder="GP"
+                                      className="w-20 text-right text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-amber-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100" />
+                                    <button onClick={bearbeitungAbbrechen} disabled={speichernLaden === '__frei__'}
+                                      className="text-xs text-gray-500 dark:text-gray-400 px-2 py-1 rounded border border-gray-200 dark:border-gray-600 hover:border-gray-400 disabled:opacity-50 transition-colors whitespace-nowrap">
+                                      Abbrechen
+                                    </button>
+                                    <button onClick={materialAktualisieren}
+                                      disabled={speichernLaden === '__frei__' || !editBezeichnung.trim()}
+                                      className="text-xs bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white px-3 py-1.5 rounded transition-colors whitespace-nowrap">
+                                      {speichernLaden === '__frei__' ? '...' : 'Speichern'}
+                                    </button>
+                                    {speicherFehlerGewerk === '__frei__' && speicherFehler && (
+                                      <span className="text-xs text-red-600 dark:text-red-400 basis-full">{speicherFehler}</span>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          }
+                          return (
+                            <tr key={m.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                              <td className="px-4 py-2 text-gray-800 dark:text-gray-200">{m.bezeichnung}</td>
+                              <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-300">{m.menge ?? '–'}</td>
+                              <td className="px-4 py-2 text-gray-500 dark:text-gray-400">{m.einheit ?? '–'}</td>
+                              <td className="px-4 py-2 text-right text-purple-600 dark:text-purple-400">{m.zeitaufwand_stunden != null ? `${m.zeitaufwand_stunden} h` : '–'}</td>
+                              <td className="px-4 py-2 text-right text-gray-500 dark:text-gray-400">{m.einzelpreis != null ? formatEuro(m.einzelpreis) : '–'}</td>
+                              <td className="px-4 py-2 text-right font-medium text-orange-600 dark:text-orange-400">{formatEuro(m.gesamtpreis)}</td>
+                              <td className="px-4 py-2 text-center whitespace-nowrap">
+                                <button onClick={() => bearbeitungStarten('__frei__', m)} className="text-gray-300 hover:text-amber-500 transition-colors mr-1" title="Bearbeiten">✎</button>
+                                <button onClick={() => materialLoeschen(m.id)} className="text-gray-300 hover:text-red-400 transition-colors text-lg leading-none">×</button>
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -321,17 +402,11 @@ export default function EigenleistungenTab() {
                     <input value={f.gesamtpreis} onChange={e => formularAendern('__frei__', 'gesamtpreis', e.target.value)} placeholder="250,00"
                       className="w-full text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100" />
                   </div>
-                  {bearbeitungId && bearbeitungGewerk === '__frei__' && (
-                    <button onClick={bearbeitungAbbrechen}
-                      className="text-sm text-gray-500 dark:text-gray-400 px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-gray-400 transition-colors whitespace-nowrap">
-                      Abbrechen
-                    </button>
-                  )}
                   <button onClick={() => materialHinzufuegen('__frei__')} disabled={speichernLaden === '__frei__' || !f.bezeichnung.trim()}
-                    className={`text-sm text-white px-4 py-2 rounded-lg disabled:opacity-50 transition-colors whitespace-nowrap ${bearbeitungId && bearbeitungGewerk === '__frei__' ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-600 hover:bg-blue-700'}`}>
-                    {speichernLaden === '__frei__' ? '...' : bearbeitungId && bearbeitungGewerk === '__frei__' ? 'Speichern' : '+ Hinzufügen'}
+                    className="text-sm bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg transition-colors whitespace-nowrap">
+                    {speichernLaden === '__frei__' ? '...' : '+ Hinzufügen'}
                   </button>
-                  {speicherFehlerGewerk === '__frei__' && speicherFehler && (
+                  {!bearbeitungId && speicherFehlerGewerk === '__frei__' && speicherFehler && (
                     <span className="text-xs text-red-600 dark:text-red-400 basis-full">{speicherFehler}</span>
                   )}
                 </div>
@@ -444,20 +519,68 @@ export default function EigenleistungenTab() {
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
-                            {gwMat.map(m => (
-                              <tr key={m.id} className={`hover:bg-gray-50 dark:hover:bg-gray-700/50 ${bearbeitungId === m.id ? 'bg-amber-50 dark:bg-amber-900/20' : ''}`}>
-                                <td className="px-4 py-2 text-gray-800 dark:text-gray-200">{m.bezeichnung}</td>
-                                <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-300">{m.menge ?? '–'}</td>
-                                <td className="px-4 py-2 text-gray-500 dark:text-gray-400">{m.einheit ?? '–'}</td>
-                                <td className="px-4 py-2 text-right text-purple-600 dark:text-purple-400">{m.zeitaufwand_stunden != null ? `${m.zeitaufwand_stunden} h` : '–'}</td>
-                                <td className="px-4 py-2 text-right text-gray-500 dark:text-gray-400">{m.einzelpreis != null ? formatEuro(m.einzelpreis) : '–'}</td>
-                                <td className="px-4 py-2 text-right font-medium text-orange-600 dark:text-orange-400">{formatEuro(m.gesamtpreis)}</td>
-                                <td className="px-4 py-2 text-center whitespace-nowrap">
-                                  <button onClick={() => bearbeitungStarten(gewerk, m)} className="text-gray-300 hover:text-amber-500 transition-colors mr-1" title="Bearbeiten">✎</button>
-                                  <button onClick={() => materialLoeschen(m.id)} className="text-gray-300 hover:text-red-400 transition-colors text-lg leading-none">×</button>
-                                </td>
-                              </tr>
-                            ))}
+                            {gwMat.map(m => {
+                              if (bearbeitungId === m.id) {
+                                return (
+                                  <tr key={m.id} className="bg-amber-50 dark:bg-amber-900/20">
+                                    <td colSpan={7} className="px-4 py-2">
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <input value={editBezeichnung} onChange={e => editFormularAendern('bezeichnung', e.target.value)}
+                                          onKeyDown={e => e.key === 'Enter' && materialAktualisieren()}
+                                          placeholder="Bezeichnung"
+                                          className="flex-1 min-w-32 text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-amber-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100" />
+                                        <input value={editMenge} onChange={e => editFormularAendern('menge', e.target.value)}
+                                          onKeyDown={e => e.key === 'Enter' && materialAktualisieren()}
+                                          placeholder="Menge"
+                                          className="w-16 text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-amber-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100" />
+                                        <input value={editEinheit} onChange={e => editFormularAendern('einheit', e.target.value)}
+                                          onKeyDown={e => e.key === 'Enter' && materialAktualisieren()}
+                                          placeholder="Einheit"
+                                          className="w-16 text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-amber-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100" />
+                                        <input value={editZeitaufwand} onChange={e => editFormularAendern('zeitaufwand_stunden', e.target.value)}
+                                          onKeyDown={e => e.key === 'Enter' && materialAktualisieren()}
+                                          placeholder="Std."
+                                          className="w-16 text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-amber-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100" />
+                                        <input value={editEinzelpreis} onChange={e => editFormularAendern('einzelpreis', e.target.value)}
+                                          onKeyDown={e => e.key === 'Enter' && materialAktualisieren()}
+                                          placeholder="EP"
+                                          className="w-20 text-right text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-amber-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100" />
+                                        <input value={editGesamtpreis} onChange={e => editFormularAendern('gesamtpreis', e.target.value)}
+                                          onKeyDown={e => e.key === 'Enter' && materialAktualisieren()}
+                                          placeholder="GP"
+                                          className="w-20 text-right text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-amber-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100" />
+                                        <button onClick={bearbeitungAbbrechen} disabled={speichernLaden === gewerk}
+                                          className="text-xs text-gray-500 dark:text-gray-400 px-2 py-1 rounded border border-gray-200 dark:border-gray-600 hover:border-gray-400 disabled:opacity-50 transition-colors whitespace-nowrap">
+                                          Abbrechen
+                                        </button>
+                                        <button onClick={materialAktualisieren}
+                                          disabled={speichernLaden === gewerk || !editBezeichnung.trim()}
+                                          className="text-xs bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white px-3 py-1.5 rounded transition-colors whitespace-nowrap">
+                                          {speichernLaden === gewerk ? '...' : 'Speichern'}
+                                        </button>
+                                        {speicherFehlerGewerk === gewerk && speicherFehler && (
+                                          <span className="text-xs text-red-600 dark:text-red-400 basis-full">{speicherFehler}</span>
+                                        )}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              }
+                              return (
+                                <tr key={m.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                                  <td className="px-4 py-2 text-gray-800 dark:text-gray-200">{m.bezeichnung}</td>
+                                  <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-300">{m.menge ?? '–'}</td>
+                                  <td className="px-4 py-2 text-gray-500 dark:text-gray-400">{m.einheit ?? '–'}</td>
+                                  <td className="px-4 py-2 text-right text-purple-600 dark:text-purple-400">{m.zeitaufwand_stunden != null ? `${m.zeitaufwand_stunden} h` : '–'}</td>
+                                  <td className="px-4 py-2 text-right text-gray-500 dark:text-gray-400">{m.einzelpreis != null ? formatEuro(m.einzelpreis) : '–'}</td>
+                                  <td className="px-4 py-2 text-right font-medium text-orange-600 dark:text-orange-400">{formatEuro(m.gesamtpreis)}</td>
+                                  <td className="px-4 py-2 text-center whitespace-nowrap">
+                                    <button onClick={() => bearbeitungStarten(gewerk, m)} className="text-gray-300 hover:text-amber-500 transition-colors mr-1" title="Bearbeiten">✎</button>
+                                    <button onClick={() => materialLoeschen(m.id)} className="text-gray-300 hover:text-red-400 transition-colors text-lg leading-none">×</button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
                           </tbody>
                         </table>
                       </div>
@@ -495,17 +618,11 @@ export default function EigenleistungenTab() {
                         <input value={f.gesamtpreis} onChange={e => formularAendern(gewerk, 'gesamtpreis', e.target.value)} placeholder="250,00"
                           className="w-full text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100" />
                       </div>
-                      {bearbeitungId && bearbeitungGewerk === gewerk && (
-                        <button onClick={bearbeitungAbbrechen}
-                          className="text-sm text-gray-500 dark:text-gray-400 px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-gray-400 transition-colors whitespace-nowrap">
-                          Abbrechen
-                        </button>
-                      )}
                       <button onClick={() => materialHinzufuegen(gewerk)} disabled={speichernLaden === gewerk || !f.bezeichnung.trim()}
-                        className={`text-sm text-white px-4 py-2 rounded-lg disabled:opacity-50 transition-colors whitespace-nowrap ${bearbeitungId && bearbeitungGewerk === gewerk ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-600 hover:bg-blue-700'}`}>
-                        {speichernLaden === gewerk ? '...' : bearbeitungId && bearbeitungGewerk === gewerk ? 'Speichern' : '+ Hinzufügen'}
+                        className="text-sm bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg transition-colors whitespace-nowrap">
+                        {speichernLaden === gewerk ? '...' : '+ Hinzufügen'}
                       </button>
-                      {speicherFehlerGewerk === gewerk && speicherFehler && (
+                      {!bearbeitungId && speicherFehlerGewerk === gewerk && speicherFehler && (
                         <span className="text-xs text-red-600 dark:text-red-400 basis-full">{speicherFehler}</span>
                       )}
                     </div>
