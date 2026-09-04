@@ -36,4 +36,5 @@ body {
   .print\:text-gray-900 { color: #111827 !important; }
   .print\:border-0 { border: none !important; }
   .print\:bg-transparent { background: transparent !important; }
+  .print-kein-trennstrich { border-top: none !important; }
 }

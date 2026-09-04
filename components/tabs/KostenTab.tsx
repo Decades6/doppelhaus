@@ -663,7 +663,7 @@ export default function KostenTab() {
                         </td>
                       </tr>
                       {items.map(m => (
-                        <tr key={m.id} className={`${isOffen ? 'table-row' : 'hidden'} print:table-row bg-orange-50/30 dark:bg-orange-900/5`}>
+                        <tr key={m.id} className={`${isOffen ? 'table-row' : 'hidden'} print:table-row print-kein-trennstrich bg-orange-50/30 dark:bg-orange-900/5`}>
                           <td className="px-6 py-1 pl-16 text-xs text-gray-500 dark:text-gray-400">
                             {m.bezeichnung}
                             {m.menge != null && <span className="ml-1 text-gray-400">{m.menge} {m.einheit ?? ''}</span>}
