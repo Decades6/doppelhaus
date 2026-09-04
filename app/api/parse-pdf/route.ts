@@ -16,6 +16,10 @@ const KEINE_ANKLEBENDE_MENGE = '(?!\\.\\d{3},\\d{2})';
 const POS_NR_3_RX = new RegExp(`^(\\d+\\.\\d+\\.\\d+(?:\\.\\d+${KEINE_ANKLEBENDE_MENGE})*\\.)`);
 const POS_NR_2_RX = /^(\d+\.\d+\.)(?=\d)/;
 const GEWERK_RX   = /^(\d+\.\d+\.)([A-ZÄÖÜa-zäöüß].{3,})/;
+// Kapitel-Überschriften wie "11. Fundamente + Materiallieferung Garage" — nur ein Nummernblock
+// statt zwei. Dient als Fallback-Gewerk für Kapitel ohne eigene Zwischenüberschrift (z.B. wenn
+// Positionen direkt zweistufig nummeriert sind wie "11.1.", ohne vorherige "11.1 Titel"-Zeile).
+const KAPITEL_RX  = /^(\d+\.)([A-ZÄÖÜa-zäöüß].{3,})/;
 const SKIP_RX     = /^(Summe \d|Zwischensumme|Nettosumme|Bruttosumme|zzgl\.|MwSt)/i;
 const CLOSING_RX  = /^(Summe |Zwischensumme )/i;
 
@@ -145,8 +149,13 @@ function parseLeistungsverzeichnis(text: string): { positionen: ParsedPosition[]
     if (posMatch) {
       if (current) blocks.push(current);
       current = { posNr: posMatch[1], gewerk: currentGewerk, lines: [line] };
-    } else if (current) {
-      current.lines.push(line);
+    } else {
+      const kapMatch = line.match(KAPITEL_RX);
+      if (kapMatch) {
+        currentGewerk = kapMatch[2].trim();
+        continue;
+      }
+      if (current) current.lines.push(line);
     }
   }
   if (current) blocks.push(current);
