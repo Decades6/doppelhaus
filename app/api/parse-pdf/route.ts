@@ -10,16 +10,21 @@ const PREIS_ZEILE_RX      = /\d{1,3}(?:\.\d{3})*,\d{2}\s*$/;
 const PREIS_KLAMMER_RX    = /\((\d{1,3}(?:\.\d{3})*,\d{2})\)/;
 const PREIS_IN_KLAMMER_RX = /\(\d{1,3}(?:\.\d{3})*,\d{2}\)/;
 
-const POS_NR_3_RX = /^(\d+\.\d+\.\d+(?:\.\d+)*\.)/;
+// Verhindert, dass eine Positionsnummer die erste Ziffer einer direkt anklebenden
+// Tausender-Menge (z.B. "1.5.3.1.005,00kg" → Position 1.5.3, Menge 1.005,00) mitfrisst.
+const KEINE_ANKLEBENDE_MENGE = '(?!\\.\\d{3},\\d{2})';
+const POS_NR_3_RX = new RegExp(`^(\\d+\\.\\d+\\.\\d+(?:\\.\\d+${KEINE_ANKLEBENDE_MENGE})*\\.)`);
 const POS_NR_2_RX = /^(\d+\.\d+\.)(?=\d)/;
 const GEWERK_RX   = /^(\d+\.\d+\.)([A-ZÄÖÜa-zäöüß].{3,})/;
 const SKIP_RX     = /^(Summe \d|Zwischensumme|Nettosumme|Bruttosumme|zzgl\.|MwSt)/i;
 const CLOSING_RX  = /^(Summe |Zwischensumme )/i;
 
+// Deutsches Zahlenformat mit beliebig vielen Tausenderpunkten, z.B. "1.005,00" oder "12.345,5"
+const DEUTSCHE_ZAHL = '\\d{1,3}(?:\\.\\d{3})*(?:,\\d+)?';
 const EINHEIT_LIST = 'm²xWo\\.?|m2xWo\\.?|m³xWo\\.?|m3xWo\\.?|mxWo\\.?|m²|m2|m³|m3|lfdm|lfm|Woch\\.?|Wo\\.?|Stück|Stck\\.?|Stk\\.?|Std\\.?|St\\.?|Psch\\.?|psch\\.?|Kanister|kg|VE|Pkg\\.?|qm|m';
-const EINHEIT_RX            = new RegExp(`(\\d+(?:[,.]\\d+)?)\\s*(${EINHEIT_LIST})(?=\\s|[A-ZÄÖÜ]|$)`, 'i');
+const EINHEIT_RX            = new RegExp(`(${DEUTSCHE_ZAHL})\\s*(${EINHEIT_LIST})(?=\\s|[A-ZÄÖÜ]|$)`, 'i');
 const EINHEIT_OHNE_MENGE_RX = new RegExp(`^(${EINHEIT_LIST})(?=\\s|$)`, 'i');
-const ZAHL_KLEBT_RX         = /^(\d+(?:[,.]\d+)?)-?(?=[A-ZÄÖÜ])/;
+const ZAHL_KLEBT_RX         = new RegExp(`^(${DEUTSCHE_ZAHL})-?(?=[A-ZÄÖÜ])`);
 
 // Zeichen/Wörter die anzeigen dass ein Titel auf der nächsten Zeile weitergeht
 const VERBINDUNGSWOERTER = new Set([

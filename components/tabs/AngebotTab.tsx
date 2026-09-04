@@ -249,9 +249,14 @@ ${zeilen}
     });
   }
 
+  // Nur Positionen, die wirklich Teil des aktuellen Angebots sind — verwaiste
+  // Eigenleistungen (aus dem PDF verschwundene, aber übernommene Positionen)
+  // gehören nur in den Eigenleistungen-Tab, nicht in die Angebotsansicht.
+  const realePositionen = positionen.filter(p => !p.nicht_im_angebot);
+
   const ersetzteIds = new Set<string>();
-  [...new Set(positionen.map(p => p.gewerk))].forEach(gw => {
-    const sorted = positionen
+  [...new Set(realePositionen.map(p => p.gewerk))].forEach(gw => {
+    const sorted = realePositionen
       .filter(p => p.gewerk === gw)
       .sort((a, b) => comparePositionNr(a.position_nr, b.position_nr));
     for (let i = 0; i < sorted.length - 1; i++) {
@@ -262,8 +267,8 @@ ${zeilen}
   });
 
   const istOptional = (p: Position) => (p.eventual || p.alternativ) && !p.optional_aktiv;
-  const aktivPositionen = positionen.filter(p => !istOptional(p) && !ersetzteIds.has(p.id) && !p.nicht_im_angebot);
-  const optionalPositionen = positionen.filter(p => p.eventual || p.alternativ);
+  const aktivPositionen = realePositionen.filter(p => !istOptional(p) && !ersetzteIds.has(p.id));
+  const optionalPositionen = realePositionen.filter(p => p.eventual || p.alternativ);
   const optionalNichtAktiv = optionalPositionen.filter(p => !p.optional_aktiv);
   const eventualSumme = optionalNichtAktiv.reduce((sum, p) => sum + p.gesamtpreis, 0);
 
@@ -273,9 +278,9 @@ ${zeilen}
   const mwst = verbleibend * 0.19;
   const brutto = verbleibend * 1.19;
 
-  const gewerke = [...new Set(positionen.map(p => p.gewerk))].sort((a, b) => {
-    const aNr = positionen.find(p => p.gewerk === a && p.position_nr)?.position_nr ?? null;
-    const bNr = positionen.find(p => p.gewerk === b && p.position_nr)?.position_nr ?? null;
+  const gewerke = [...new Set(realePositionen.map(p => p.gewerk))].sort((a, b) => {
+    const aNr = realePositionen.find(p => p.gewerk === a && p.position_nr)?.position_nr ?? null;
+    const bNr = realePositionen.find(p => p.gewerk === b && p.position_nr)?.position_nr ?? null;
     return comparePositionNr(aNr, bNr);
   });
 
@@ -370,12 +375,12 @@ ${zeilen}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border-l-4 border-blue-500">
           <div className="text-sm text-gray-500 dark:text-gray-400 mb-1">Gesamtangebot</div>
           <div className="text-2xl font-bold text-gray-900 dark:text-white">{formatEuro(gesamtsumme)}</div>
-          <div className="text-xs text-gray-400 mt-1">{positionen.length} Positionen</div>
+          <div className="text-xs text-gray-400 mt-1">{realePositionen.length} Positionen</div>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border-l-4 border-green-500">
           <div className="text-sm text-gray-500 dark:text-gray-400 mb-1">Ersparnis durch Eigenleistung</div>
           <div className="text-2xl font-bold text-green-600 dark:text-green-400">{formatEuro(eigenleistungSumme)}</div>
-          <div className="text-xs text-gray-400 mt-1">{positionen.filter(p => p.eigenleistung).length} Positionen markiert</div>
+          <div className="text-xs text-gray-400 mt-1">{realePositionen.filter(p => p.eigenleistung).length} Positionen markiert</div>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border-l-4 border-orange-500">
           <div className="text-sm text-gray-500 dark:text-gray-400 mb-1">Verbleibend für Bauträger</div>
@@ -411,7 +416,7 @@ ${zeilen}
 
       <div className="space-y-4">
         {gewerke.map(gewerk => {
-          const gwPositionen = positionen
+          const gwPositionen = realePositionen
             .filter(p => p.gewerk === gewerk)
             .sort((a, b) => comparePositionNr(a.position_nr, b.position_nr));
           const gwPaare = buildPaare(gwPositionen);
