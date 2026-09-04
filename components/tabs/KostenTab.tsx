@@ -604,7 +604,7 @@ export default function KostenTab() {
           <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
 
             {/* Hauskosten */}
-            <tr className="bg-blue-50/50 dark:bg-blue-900/10">
+            <tr className="bg-blue-100 dark:bg-blue-900/40">
               <td className="px-6 py-4 font-semibold text-gray-800 dark:text-white">Hauskosten</td>
               <td className="px-6 py-4 text-right font-semibold text-gray-800 dark:text-white">
                 {brutto > 0 ? (
@@ -629,7 +629,7 @@ export default function KostenTab() {
             {/* Eigenleistung Materialkosten */}
             {materialGewerke.length > 0 && (
               <>
-                <tr className="bg-orange-50/50 dark:bg-orange-900/10">
+                <tr className="bg-orange-100 dark:bg-orange-900/40">
                   <td className="px-6 py-4 font-semibold text-gray-800 dark:text-white">
                     Eigenleistung Materialkosten
                     <span className="ml-2 text-xs font-normal text-gray-400">(eigene Materialien)</span>
@@ -687,7 +687,7 @@ export default function KostenTab() {
             )}
 
             {/* ══ BAUNEBENKOSTEN ══ */}
-            <tr className="bg-gray-100 dark:bg-gray-700/80">
+            <tr className="bg-gray-200 dark:bg-gray-700">
               <td className="px-6 py-3 font-bold text-gray-800 dark:text-white text-sm tracking-wide">Baunebenkosten</td>
               <td className="px-6 py-3 text-right font-bold text-gray-800 dark:text-white">
                 {baunebenkostenGesamt > 0 ? formatEuro(baunebenkostenGesamt) : <span className="text-gray-400 font-normal text-xs">—</span>}
@@ -764,7 +764,7 @@ export default function KostenTab() {
             {renderKategorie('vermessung')}
 
             {/* ══ AUSSENANLAGEN ══ */}
-            <tr className="bg-gray-100 dark:bg-gray-700/80">
+            <tr className="bg-gray-200 dark:bg-gray-700">
               <td className="px-6 py-3 font-bold text-gray-800 dark:text-white text-sm tracking-wide">Außenanlagen</td>
               <td className="px-6 py-3 text-right font-bold text-gray-800 dark:text-white">
                 {aussenanlagenGesamt > 0 ? formatEuro(aussenanlagenGesamt) : <span className="text-gray-400 font-normal text-xs">—</span>}
@@ -773,7 +773,7 @@ export default function KostenTab() {
             {renderKategorie('aussenanlagen')}
 
             {/* ══ WEITERE KOSTEN ══ */}
-            <tr className="bg-gray-100 dark:bg-gray-700/80">
+            <tr className="bg-gray-200 dark:bg-gray-700">
               <td className="px-6 py-3 font-bold text-gray-800 dark:text-white text-sm tracking-wide">Weitere Kosten</td>
               <td className="px-6 py-3 text-right font-bold text-gray-800 dark:text-white">
                 {weitereKostenGesamt > 0 ? formatEuro(weitereKostenGesamt) : <span className="text-gray-400 font-normal text-xs">—</span>}
