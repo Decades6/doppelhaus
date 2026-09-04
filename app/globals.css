@@ -26,6 +26,7 @@ body {
 }
 
 @media print {
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
   header, nav { display: none !important; }
   body { background: white !important; color: black !important; }
   .print\:hidden { display: none !important; }
