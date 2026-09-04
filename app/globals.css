@@ -26,7 +26,6 @@ body {
 }
 
 @media print {
-  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
   header, nav { display: none !important; }
   body { background: white !important; color: black !important; }
   .print\:hidden { display: none !important; }
@@ -38,4 +37,16 @@ body {
   .print\:border-0 { border: none !important; }
   .print\:bg-transparent { background: transparent !important; }
   .print-kein-trennstrich { border-top: none !important; border-bottom: none !important; }
+
+  /* Abschnitts-Header immer hell drucken, unabhängig vom aktuellen Farbmodus */
+  .print-akzent-blau, .print-akzent-orange, .print-akzent-grau {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  .print-akzent-blau { background-color: #dbeafe !important; }
+  .print-akzent-blau td { color: #1f2937 !important; }
+  .print-akzent-orange { background-color: #ffedd5 !important; }
+  .print-akzent-orange > td:first-child { color: #1f2937 !important; }
+  .print-akzent-grau { background-color: #e5e7eb !important; }
+  .print-akzent-grau td { color: #1f2937 !important; }
 }
