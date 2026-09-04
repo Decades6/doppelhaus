@@ -90,6 +90,11 @@ export default function KostenTab() {
   const [speichern, setSpeichern] = useState(false);
   const [bearbeitungId, setBearbeitungId] = useState<string | null>(null);
   const [bearbeitungKategorie, setBearbeitungKategorie] = useState<Kategorie | null>(null);
+  const [editBezeichnung, setEditBezeichnung] = useState('');
+  const [editUnterkategorie, setEditUnterkategorie] = useState('');
+  const [editBetrag, setEditBetrag] = useState('');
+  const [editMenge, setEditMenge] = useState('');
+  const [editEinzelpreis, setEditEinzelpreis] = useState('');
   const [grundstueckspreisEingabe, setGrundstueckspreisEingabe] = useState('');
   const speicherTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [bezahltNachBeschreibung, setBezahltNachBeschreibung] = useState<Record<string, number>>({});
@@ -198,15 +203,29 @@ export default function KostenTab() {
   function bearbeitungStarten(pos: KostenPosition) {
     setBearbeitungId(pos.id);
     setBearbeitungKategorie(pos.kategorie as Kategorie);
+    setEditBezeichnung(pos.bezeichnung);
+    setEditUnterkategorie(pos.unterkategorie ?? '');
+    setEditBetrag(formatGermanNumber(pos.betrag));
     const menge = pos.menge ?? '';
+    setEditMenge(menge);
     const mengeNum = parseFloat(menge.replace(',', '.'));
     const einzelpreis = (pos.kategorie === 'maschinen' || pos.kategorie === 'sonstiges') && !isNaN(mengeNum) && mengeNum > 0
       ? formatGermanNumber(pos.betrag / mengeNum)
       : '';
-    setNeuForm(prev => ({
-      ...prev,
-      [pos.kategorie]: { bezeichnung: pos.bezeichnung, betrag: formatGermanNumber(pos.betrag), menge, einzelpreis, unterkategorie: pos.unterkategorie ?? '' },
-    }));
+    setEditEinzelpreis(einzelpreis);
+  }
+
+  function editMengeEpAendern(feld: 'menge' | 'einzelpreis', wert: string) {
+    const neueMenge = feld === 'menge' ? wert : editMenge;
+    const neuerEp = feld === 'einzelpreis' ? wert : editEinzelpreis;
+    if (feld === 'menge') setEditMenge(wert); else setEditEinzelpreis(wert);
+    const m = parseFloat(neueMenge.replace(',', '.'));
+    const ep = parseFloat(neuerEp.replace(',', '.'));
+    if (!isNaN(m) && m > 0 && !isNaN(ep) && ep > 0) {
+      setEditBetrag((m * ep).toFixed(2).replace('.', ','));
+    } else if (!isNaN(ep) && ep > 0) {
+      setEditBetrag(feld === 'einzelpreis' ? wert : neuerEp);
+    }
   }
 
   function mengeEpAendern(key: string, feld: 'menge' | 'einzelpreis', wert: string) {
@@ -225,9 +244,36 @@ export default function KostenTab() {
   }
 
   function bearbeitungAbbrechen() {
-    if (bearbeitungKategorie) setNeuForm(prev => ({ ...prev, [bearbeitungKategorie]: LEER_FORM }));
     setBearbeitungId(null);
     setBearbeitungKategorie(null);
+  }
+
+  async function positionAktualisieren() {
+    if (!bearbeitungId || !bearbeitungKategorie) return;
+    if (!editBezeichnung.trim()) return;
+    const betrag = parseGermanNumber(editBetrag) ?? 0;
+    if (betrag <= 0) return;
+
+    const id = bearbeitungId;
+    const kategorie = bearbeitungKategorie;
+    const menge = editMenge.trim() || null;
+    const unterkategorie = editUnterkategorie.trim() || null;
+    setBearbeitungId(null);
+    setBearbeitungKategorie(null);
+
+    const { data, error } = await supabase
+      .from('kosten_positionen')
+      .update({ bezeichnung: editBezeichnung.trim(), betrag, menge, unterkategorie })
+      .eq('id', id)
+      .select('id, kategorie, bezeichnung, betrag, menge, unterkategorie').single();
+    if (!error && data) {
+      setKostenPositionen(prev => ({
+        ...prev,
+        [kategorie]: (prev[kategorie] ?? []).map(p => p.id === id ? data as KostenPosition : p),
+      }));
+    } else if (error) {
+      console.error('Kosten speichern fehlgeschlagen:', error.message);
+    }
   }
 
   async function positionHinzufuegen(kategorie: Kategorie) {
@@ -239,35 +285,15 @@ export default function KostenTab() {
     const menge = f.menge?.trim() || null;
     const unterkategorie = f.unterkategorie?.trim() || null;
 
-    if (bearbeitungId) {
-      const idZuAktualisieren = bearbeitungId;
-      setBearbeitungId(null);
-      setBearbeitungKategorie(null);
-      setNeuForm(prev => ({ ...prev, [kategorie]: LEER_FORM }));
-      const { data, error } = await supabase
-        .from('kosten_positionen')
-        .update({ bezeichnung: f.bezeichnung.trim(), betrag, menge, unterkategorie })
-        .eq('id', idZuAktualisieren)
-        .select('id, kategorie, bezeichnung, betrag, menge, unterkategorie').single();
-      if (!error && data) {
-        setKostenPositionen(prev => ({
-          ...prev,
-          [kategorie]: (prev[kategorie] ?? []).map(p => p.id === idZuAktualisieren ? data as KostenPosition : p),
-        }));
-      } else if (error) {
-        console.error('Kosten speichern fehlgeschlagen:', error.message);
-      }
-    } else {
-      const { data: { user } } = await supabase.auth.getUser();
-      const { data, error } = await supabase
-        .from('kosten_positionen')
-        .insert({ user_id: user?.id, kategorie, bezeichnung: f.bezeichnung.trim(), betrag, menge, unterkategorie })
-        .select().single();
+    const { data: { user } } = await supabase.auth.getUser();
+    const { data, error } = await supabase
+      .from('kosten_positionen')
+      .insert({ user_id: user?.id, kategorie, bezeichnung: f.bezeichnung.trim(), betrag, menge, unterkategorie })
+      .select().single();
 
-      if (!error && data) {
-        setKostenPositionen(prev => ({ ...prev, [kategorie]: [...(prev[kategorie] ?? []), data as KostenPosition] }));
-        setNeuForm(prev => ({ ...prev, [kategorie]: LEER_FORM }));
-      }
+    if (!error && data) {
+      setKostenPositionen(prev => ({ ...prev, [kategorie]: [...(prev[kategorie] ?? []), data as KostenPosition] }));
+      setNeuForm(prev => ({ ...prev, [kategorie]: LEER_FORM }));
     }
   }
 
@@ -299,19 +325,54 @@ export default function KostenTab() {
     const hatGruppen = vorhandeneGruppen.length > 0;
     const ohneGruppeSumme = ohneGruppe.reduce((s, p) => s + p.betrag, 0);
 
-    const renderPosition = (p: KostenPosition) => (
-      <tr key={p.id} className={bearbeitungId === p.id ? 'bg-amber-50 dark:bg-amber-900/20' : ''}>
-        <td className="px-6 py-1.5 pl-14 text-xs text-gray-500 dark:text-gray-400">{p.bezeichnung}</td>
-        <td className="px-6 py-1.5 text-right text-xs text-gray-600 dark:text-gray-300">
-          <span className="inline-flex items-center justify-end gap-2">
-            <Ampel bezahlt={bezahltNachBeschreibung[p.bezeichnung.trim().toLowerCase()] ?? 0} gesamt={p.betrag} />
-            {formatEuro(p.betrag)}
-          </span>
-          <button onClick={() => bearbeitungStarten(p)} className="ml-2 text-gray-300 hover:text-amber-500 transition-colors print:hidden" title="Bearbeiten">✎</button>
-          <button onClick={() => positionLoeschen(p.id, key)} className="ml-1 text-gray-300 hover:text-red-400 transition-colors print:hidden">×</button>
-        </td>
-      </tr>
-    );
+    const renderPosition = (p: KostenPosition) => {
+      if (bearbeitungId === p.id) {
+        return (
+          <tr key={p.id} className="bg-amber-50 dark:bg-amber-900/20">
+            <td colSpan={2} className="px-6 py-2 pl-14">
+              <div className="flex items-center gap-2 flex-wrap">
+                <input type="text" value={editBezeichnung}
+                  onChange={e => setEditBezeichnung(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && positionAktualisieren()}
+                  placeholder="Bezeichnung"
+                  className="flex-1 min-w-32 text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-amber-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
+                <input type="text" value={editUnterkategorie}
+                  list={`gruppen-${key}`}
+                  onChange={e => setEditUnterkategorie(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && positionAktualisieren()}
+                  placeholder="Kategorie (optional)"
+                  className="w-36 text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-amber-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
+                <input type="text" value={editBetrag}
+                  onChange={e => setEditBetrag(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && positionAktualisieren()}
+                  placeholder="0,00"
+                  className="w-24 text-right text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-amber-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
+                <span className="text-xs text-gray-400">€</span>
+                <button onClick={bearbeitungAbbrechen} className="text-xs text-gray-500 dark:text-gray-400 px-2 py-1 rounded border border-gray-200 dark:border-gray-600 hover:border-gray-400 transition-colors whitespace-nowrap">Abbrechen</button>
+                <button onClick={positionAktualisieren}
+                  disabled={!editBezeichnung.trim() || (parseGermanNumber(editBetrag) ?? 0) <= 0}
+                  className="text-xs text-amber-500 hover:text-amber-700 dark:hover:text-amber-400 disabled:text-gray-300 dark:disabled:text-gray-600 disabled:cursor-not-allowed transition-colors whitespace-nowrap">
+                  Speichern
+                </button>
+              </div>
+            </td>
+          </tr>
+        );
+      }
+      return (
+        <tr key={p.id}>
+          <td className="px-6 py-1.5 pl-14 text-xs text-gray-500 dark:text-gray-400">{p.bezeichnung}</td>
+          <td className="px-6 py-1.5 text-right text-xs text-gray-600 dark:text-gray-300">
+            <span className="inline-flex items-center justify-end gap-2">
+              <Ampel bezahlt={bezahltNachBeschreibung[p.bezeichnung.trim().toLowerCase()] ?? 0} gesamt={p.betrag} />
+              {formatEuro(p.betrag)}
+            </span>
+            <button onClick={() => bearbeitungStarten(p)} className="ml-2 text-gray-300 hover:text-amber-500 transition-colors print:hidden" title="Bearbeiten">✎</button>
+            <button onClick={() => positionLoeschen(p.id, key)} className="ml-1 text-gray-300 hover:text-red-400 transition-colors print:hidden">×</button>
+          </td>
+        </tr>
+      );
+    };
 
     return (
       <Fragment key={key}>
@@ -374,13 +435,10 @@ export default function KostenTab() {
                 placeholder="0,00"
                 className="w-24 text-right text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
               <span className="text-xs text-gray-400">€</span>
-              {bearbeitungId && bearbeitungKategorie === key && (
-                <button onClick={bearbeitungAbbrechen} className="text-xs text-gray-500 dark:text-gray-400 px-2 py-1 rounded border border-gray-200 dark:border-gray-600 hover:border-gray-400 transition-colors whitespace-nowrap">Abbrechen</button>
-              )}
               <button onClick={() => positionHinzufuegen(key)}
                 disabled={!form.bezeichnung.trim() || (parseGermanNumber(form.betrag) ?? 0) <= 0}
-                className={`text-xs disabled:text-gray-300 dark:disabled:text-gray-600 disabled:cursor-not-allowed transition-colors whitespace-nowrap ${bearbeitungId && bearbeitungKategorie === key ? 'text-amber-500 hover:text-amber-700 dark:hover:text-amber-400' : 'text-blue-500 hover:text-blue-700 dark:hover:text-blue-400'}`}>
-                {bearbeitungId && bearbeitungKategorie === key ? 'Speichern' : '+ Hinzufügen'}
+                className="text-xs text-blue-500 hover:text-blue-700 dark:hover:text-blue-400 disabled:text-gray-300 dark:disabled:text-gray-600 disabled:cursor-not-allowed transition-colors whitespace-nowrap">
+                + Hinzufügen
               </button>
             </div>
           </td>
@@ -406,22 +464,58 @@ export default function KostenTab() {
             ) : <span className="text-gray-300 dark:text-gray-600">—</span>}
           </td>
         </tr>
-        {pos.map(p => (
-          <tr key={p.id} className={bearbeitungId === p.id ? 'bg-amber-50 dark:bg-amber-900/20' : ''}>
-            <td className="px-6 py-1.5 pl-14 text-xs text-gray-500 dark:text-gray-400">
-              {p.menge && <span className="mr-1.5 text-gray-400">{p.menge}×</span>}
-              {p.bezeichnung}
-            </td>
-            <td className="px-6 py-1.5 text-right text-xs text-gray-600 dark:text-gray-300">
-              <span className="inline-flex items-center justify-end gap-2">
-                <Ampel bezahlt={bezahltNachBeschreibung[p.bezeichnung.trim().toLowerCase()] ?? 0} gesamt={p.betrag} />
-                {formatEuro(p.betrag)}
-              </span>
-              <button onClick={() => bearbeitungStarten(p)} className="ml-2 text-gray-300 hover:text-amber-500 transition-colors print:hidden" title="Bearbeiten">✎</button>
-              <button onClick={() => positionLoeschen(p.id, key)} className="ml-1 text-gray-300 hover:text-red-400 transition-colors print:hidden">×</button>
-            </td>
-          </tr>
-        ))}
+        {pos.map(p => {
+          if (bearbeitungId === p.id) {
+            return (
+              <tr key={p.id} className="bg-amber-50 dark:bg-amber-900/20">
+                <td colSpan={2} className="px-6 py-2 pl-14">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <input type="text" value={editBezeichnung}
+                      onChange={e => setEditBezeichnung(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && positionAktualisieren()}
+                      placeholder="Bezeichnung"
+                      className="flex-1 min-w-40 text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-amber-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
+                    <input type="text" value={editMenge}
+                      onChange={e => editMengeEpAendern('menge', e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && positionAktualisieren()}
+                      placeholder="Menge"
+                      className="w-16 text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-amber-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
+                    <span className="text-xs text-gray-400">×</span>
+                    <input type="text" value={editEinzelpreis}
+                      onChange={e => editMengeEpAendern('einzelpreis', e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && positionAktualisieren()}
+                      placeholder="EP"
+                      className="w-24 text-right text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-amber-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
+                    <span className="text-xs text-gray-400">€</span>
+                    {editBetrag && <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">= {editBetrag} €</span>}
+                    <button onClick={bearbeitungAbbrechen} className="text-xs text-gray-500 dark:text-gray-400 px-2 py-1 rounded border border-gray-200 dark:border-gray-600 hover:border-gray-400 transition-colors whitespace-nowrap">Abbrechen</button>
+                    <button onClick={positionAktualisieren}
+                      disabled={!editBezeichnung.trim() || (parseGermanNumber(editBetrag) ?? 0) <= 0}
+                      className="text-xs text-amber-500 hover:text-amber-700 dark:hover:text-amber-400 disabled:text-gray-300 dark:disabled:text-gray-600 disabled:cursor-not-allowed transition-colors whitespace-nowrap">
+                      Speichern
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            );
+          }
+          return (
+            <tr key={p.id}>
+              <td className="px-6 py-1.5 pl-14 text-xs text-gray-500 dark:text-gray-400">
+                {p.menge && <span className="mr-1.5 text-gray-400">{p.menge}×</span>}
+                {p.bezeichnung}
+              </td>
+              <td className="px-6 py-1.5 text-right text-xs text-gray-600 dark:text-gray-300">
+                <span className="inline-flex items-center justify-end gap-2">
+                  <Ampel bezahlt={bezahltNachBeschreibung[p.bezeichnung.trim().toLowerCase()] ?? 0} gesamt={p.betrag} />
+                  {formatEuro(p.betrag)}
+                </span>
+                <button onClick={() => bearbeitungStarten(p)} className="ml-2 text-gray-300 hover:text-amber-500 transition-colors print:hidden" title="Bearbeiten">✎</button>
+                <button onClick={() => positionLoeschen(p.id, key)} className="ml-1 text-gray-300 hover:text-red-400 transition-colors print:hidden">×</button>
+              </td>
+            </tr>
+          );
+        })}
         <tr className="print:hidden">
           <td colSpan={2} className="px-6 pb-2.5 pl-14">
             <div className="flex items-center gap-2 flex-wrap">
@@ -443,13 +537,10 @@ export default function KostenTab() {
                 className="w-24 text-right text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
               <span className="text-xs text-gray-400">€</span>
               {form.betrag && <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">= {form.betrag} €</span>}
-              {bearbeitungId && bearbeitungKategorie === key && (
-                <button onClick={bearbeitungAbbrechen} className="text-xs text-gray-500 dark:text-gray-400 px-2 py-1 rounded border border-gray-200 dark:border-gray-600 hover:border-gray-400 transition-colors whitespace-nowrap">Abbrechen</button>
-              )}
               <button onClick={() => positionHinzufuegen(key)}
                 disabled={!form.bezeichnung.trim() || (parseGermanNumber(form.betrag) ?? 0) <= 0}
-                className={`text-xs disabled:text-gray-300 dark:disabled:text-gray-600 disabled:cursor-not-allowed transition-colors whitespace-nowrap ${bearbeitungId && bearbeitungKategorie === key ? 'text-amber-500 hover:text-amber-700 dark:hover:text-amber-400' : 'text-blue-500 hover:text-blue-700 dark:hover:text-blue-400'}`}>
-                {bearbeitungId && bearbeitungKategorie === key ? 'Speichern' : '+ Hinzufügen'}
+                className="text-xs text-blue-500 hover:text-blue-700 dark:hover:text-blue-400 disabled:text-gray-300 dark:disabled:text-gray-600 disabled:cursor-not-allowed transition-colors whitespace-nowrap">
+                + Hinzufügen
               </button>
             </div>
           </td>
