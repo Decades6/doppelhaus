@@ -26,6 +26,8 @@ export default function EigenleistungenTab() {
   const [loeschenLaden, setLoeschenLaden] = useState<string | null>(null);
   const [bearbeitungId, setBearbeitungId] = useState<string | null>(null);
   const [bearbeitungGewerk, setBearbeitungGewerk] = useState<string | null>(null);
+  const [loeschenGewerk, setLoeschenGewerk] = useState<string | null>(null);
+  const [gewerkLoeschenLaden, setGewerkLoeschenLaden] = useState<string | null>(null);
 
   useEffect(() => { ladeDaten(); }, []);
 
@@ -137,6 +139,17 @@ export default function EigenleistungenTab() {
     await supabase.from('positionen').delete().eq('id', id);
     setPositionen(prev => prev.filter(p => p.id !== id));
     setLoeschenLaden(null);
+  }
+
+  async function gewerkLoeschen(gewerk: string) {
+    setGewerkLoeschenLaden(gewerk);
+    const ids = positionen.filter(p => p.gewerk === gewerk && p.nicht_im_angebot).map(p => p.id);
+    if (ids.length > 0) {
+      await supabase.from('positionen').delete().in('id', ids);
+      setPositionen(prev => prev.filter(p => !ids.includes(p.id)));
+    }
+    setLoeschenGewerk(null);
+    setGewerkLoeschenLaden(null);
   }
 
   const gewerke = [...new Set(positionen.map(p => p.gewerk))].sort((a, b) => {
@@ -308,6 +321,7 @@ export default function EigenleistungenTab() {
           const gwNetto = gwErsparnis - gwMaterialkosten;
           const isOffen = offeneGewerke.has(gewerk);
           const f = formulare[gewerk] ?? { ...LEER };
+          const alleVerwaist = gwPos.length > 0 && gwPos.every(p => p.nicht_im_angebot);
 
           return (
             <div key={gewerk} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden">
@@ -324,6 +338,32 @@ export default function EigenleistungenTab() {
                   <span className="text-gray-400 dark:text-gray-500">Bauträger: <span className="font-medium text-gray-700 dark:text-gray-200">{formatEuro(gwErsparnis)}</span></span>
                   {gwMaterialkosten > 0 && <span className="text-orange-500">Material: {formatEuro(gwMaterialkosten)}</span>}
                   <span className={`font-bold ${gwNetto >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-500'}`}>Netto: {gwNetto >= 0 ? '+' : ''}{formatEuro(gwNetto)}</span>
+                  {alleVerwaist && (
+                    loeschenGewerk === gewerk ? (
+                      <span className="flex items-center gap-1.5">
+                        <span className="text-xs text-red-600 dark:text-red-400 whitespace-nowrap">Abschnitt löschen?</span>
+                        <button
+                          onClick={e => { e.stopPropagation(); gewerkLoeschen(gewerk); }}
+                          disabled={gewerkLoeschenLaden === gewerk}
+                          className="text-xs bg-red-600 text-white px-2.5 py-1 rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors whitespace-nowrap"
+                        >
+                          {gewerkLoeschenLaden === gewerk ? '...' : 'Ja, löschen'}
+                        </button>
+                        <button
+                          onClick={e => { e.stopPropagation(); setLoeschenGewerk(null); }}
+                          className="text-xs text-gray-500 dark:text-gray-400 px-2.5 py-1 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-gray-400 transition-colors whitespace-nowrap"
+                        >
+                          Abbrechen
+                        </button>
+                      </span>
+                    ) : (
+                      <button
+                        onClick={e => { e.stopPropagation(); setLoeschenGewerk(gewerk); }}
+                        title="Diesen Abschnitt komplett löschen — nicht mehr Teil des aktuellen Angebots"
+                        className="text-gray-300 hover:text-red-400 transition-colors text-lg leading-none"
+                      >×</button>
+                    )
+                  )}
                 </div>
               </button>
 
