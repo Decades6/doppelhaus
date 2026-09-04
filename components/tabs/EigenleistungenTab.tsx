@@ -28,6 +28,8 @@ export default function EigenleistungenTab() {
   const [bearbeitungGewerk, setBearbeitungGewerk] = useState<string | null>(null);
   const [loeschenGewerk, setLoeschenGewerk] = useState<string | null>(null);
   const [gewerkLoeschenLaden, setGewerkLoeschenLaden] = useState<string | null>(null);
+  const [speicherFehler, setSpeicherFehler] = useState('');
+  const [speicherFehlerGewerk, setSpeicherFehlerGewerk] = useState<string | null>(null);
 
   useEffect(() => { ladeDaten(); }, []);
 
@@ -68,6 +70,8 @@ export default function EigenleistungenTab() {
   function bearbeitungStarten(gewerk: string, m: EigenleistungMaterial) {
     setBearbeitungId(m.id);
     setBearbeitungGewerk(gewerk);
+    setSpeicherFehler('');
+    setSpeicherFehlerGewerk(null);
     setFormulare(prev => ({
       ...prev,
       [gewerk]: {
@@ -85,6 +89,8 @@ export default function EigenleistungenTab() {
     if (bearbeitungGewerk) setFormulare(prev => ({ ...prev, [bearbeitungGewerk]: { ...LEER } }));
     setBearbeitungId(null);
     setBearbeitungGewerk(null);
+    setSpeicherFehler('');
+    setSpeicherFehlerGewerk(null);
   }
 
   async function materialHinzufuegen(gewerk: string) {
@@ -94,6 +100,8 @@ export default function EigenleistungenTab() {
     if (isNaN(gp) || gp < 0) return;
 
     setSpeichernLaden(gewerk);
+    setSpeicherFehler('');
+    setSpeicherFehlerGewerk(null);
 
     const zeitaufwand = f.zeitaufwand_stunden ? parseFloat(f.zeitaufwand_stunden.replace(',', '.')) : null;
 
@@ -106,9 +114,23 @@ export default function EigenleistungenTab() {
         gesamtpreis: gp,
         zeitaufwand_stunden: zeitaufwand && !isNaN(zeitaufwand) ? zeitaufwand : null,
       };
-      const { error } = await supabase.from('eigenleistung_materialien').update(update).eq('id', bearbeitungId);
-      if (!error) {
-        setMaterialien(prev => prev.map(m => m.id === bearbeitungId ? { ...m, ...update } : m));
+      const { data, error } = await supabase
+        .from('eigenleistung_materialien')
+        .update(update)
+        .eq('id', bearbeitungId)
+        .select()
+        .maybeSingle();
+
+      if (error) {
+        console.error('Material speichern fehlgeschlagen:', error);
+        setSpeicherFehler(error.message || 'Speichern fehlgeschlagen.');
+        setSpeicherFehlerGewerk(gewerk);
+      } else if (!data) {
+        console.error('Material speichern: Update betraf 0 Zeilen (vermutlich RLS-Berechtigung) für id', bearbeitungId);
+        setSpeicherFehler('Speichern fehlgeschlagen: keine Berechtigung, diesen Eintrag zu ändern.');
+        setSpeicherFehlerGewerk(gewerk);
+      } else {
+        setMaterialien(prev => prev.map(m => m.id === bearbeitungId ? (data as EigenleistungMaterial) : m));
         setFormulare(prev => ({ ...prev, [gewerk]: { ...LEER } }));
         setBearbeitungId(null);
         setBearbeitungGewerk(null);
@@ -120,7 +142,11 @@ export default function EigenleistungenTab() {
         .insert({ user_id: user?.id, gewerk, bezeichnung: f.bezeichnung.trim(), menge: f.menge ? parseFloat(f.menge.replace(',', '.')) : null, einheit: f.einheit || null, einzelpreis: f.einzelpreis ? parseFloat(f.einzelpreis.replace(',', '.')) : null, gesamtpreis: gp, zeitaufwand_stunden: zeitaufwand && !isNaN(zeitaufwand) ? zeitaufwand : null })
         .select().single();
 
-      if (!error && data) {
+      if (error) {
+        console.error('Material anlegen fehlgeschlagen:', error);
+        setSpeicherFehler(error.message || 'Speichern fehlgeschlagen.');
+        setSpeicherFehlerGewerk(gewerk);
+      } else if (data) {
         setMaterialien(prev => [...prev, data as EigenleistungMaterial]);
         setFormulare(prev => ({ ...prev, [gewerk]: { ...LEER } }));
       }
@@ -305,6 +331,9 @@ export default function EigenleistungenTab() {
                     className={`text-sm text-white px-4 py-2 rounded-lg disabled:opacity-50 transition-colors whitespace-nowrap ${bearbeitungId && bearbeitungGewerk === '__frei__' ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-600 hover:bg-blue-700'}`}>
                     {speichernLaden === '__frei__' ? '...' : bearbeitungId && bearbeitungGewerk === '__frei__' ? 'Speichern' : '+ Hinzufügen'}
                   </button>
+                  {speicherFehlerGewerk === '__frei__' && speicherFehler && (
+                    <span className="text-xs text-red-600 dark:text-red-400 basis-full">{speicherFehler}</span>
+                  )}
                 </div>
               </div>
             )}
@@ -476,6 +505,9 @@ export default function EigenleistungenTab() {
                         className={`text-sm text-white px-4 py-2 rounded-lg disabled:opacity-50 transition-colors whitespace-nowrap ${bearbeitungId && bearbeitungGewerk === gewerk ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-600 hover:bg-blue-700'}`}>
                         {speichernLaden === gewerk ? '...' : bearbeitungId && bearbeitungGewerk === gewerk ? 'Speichern' : '+ Hinzufügen'}
                       </button>
+                      {speicherFehlerGewerk === gewerk && speicherFehler && (
+                        <span className="text-xs text-red-600 dark:text-red-400 basis-full">{speicherFehler}</span>
+                      )}
                     </div>
                   </div>
 
