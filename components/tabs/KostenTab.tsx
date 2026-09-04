@@ -379,7 +379,7 @@ export default function KostenTab() {
         );
       }
       return (
-        <tr key={p.id}>
+        <tr key={p.id} className="print-kein-trennstrich">
           <td className="px-6 py-1.5 pl-14 text-xs text-gray-500 dark:text-gray-400">{p.bezeichnung}</td>
           <td className="px-6 py-1.5 text-right text-xs text-gray-600 dark:text-gray-300">
             <span className="inline-flex items-center justify-end gap-2">
@@ -520,7 +520,7 @@ export default function KostenTab() {
             );
           }
           return (
-            <tr key={p.id}>
+            <tr key={p.id} className="print-kein-trennstrich">
               <td className="px-6 py-1.5 pl-14 text-xs text-gray-500 dark:text-gray-400">
                 {p.menge && <span className="mr-1.5 text-gray-400">{p.menge}×</span>}
                 {p.bezeichnung}
