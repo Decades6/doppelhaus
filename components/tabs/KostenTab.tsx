@@ -95,6 +95,8 @@ export default function KostenTab() {
   const [editBetrag, setEditBetrag] = useState('');
   const [editMenge, setEditMenge] = useState('');
   const [editEinzelpreis, setEditEinzelpreis] = useState('');
+  const [speichertEdit, setSpeichertEdit] = useState(false);
+  const [editFehler, setEditFehler] = useState('');
   const [grundstueckspreisEingabe, setGrundstueckspreisEingabe] = useState('');
   const speicherTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [bezahltNachBeschreibung, setBezahltNachBeschreibung] = useState<Record<string, number>>({});
@@ -203,6 +205,7 @@ export default function KostenTab() {
   function bearbeitungStarten(pos: KostenPosition) {
     setBearbeitungId(pos.id);
     setBearbeitungKategorie(pos.kategorie as Kategorie);
+    setEditFehler('');
     setEditBezeichnung(pos.bezeichnung);
     setEditUnterkategorie(pos.unterkategorie ?? '');
     setEditBetrag(formatGermanNumber(pos.betrag));
@@ -246,6 +249,7 @@ export default function KostenTab() {
   function bearbeitungAbbrechen() {
     setBearbeitungId(null);
     setBearbeitungKategorie(null);
+    setEditFehler('');
   }
 
   async function positionAktualisieren() {
@@ -258,22 +262,36 @@ export default function KostenTab() {
     const kategorie = bearbeitungKategorie;
     const menge = editMenge.trim() || null;
     const unterkategorie = editUnterkategorie.trim() || null;
-    setBearbeitungId(null);
-    setBearbeitungKategorie(null);
+
+    setSpeichertEdit(true);
+    setEditFehler('');
 
     const { data, error } = await supabase
       .from('kosten_positionen')
       .update({ bezeichnung: editBezeichnung.trim(), betrag, menge, unterkategorie })
       .eq('id', id)
-      .select('id, kategorie, bezeichnung, betrag, menge, unterkategorie').single();
-    if (!error && data) {
-      setKostenPositionen(prev => ({
-        ...prev,
-        [kategorie]: (prev[kategorie] ?? []).map(p => p.id === id ? data as KostenPosition : p),
-      }));
-    } else if (error) {
-      console.error('Kosten speichern fehlgeschlagen:', error.message);
+      .select('id, kategorie, bezeichnung, betrag, menge, unterkategorie')
+      .maybeSingle();
+
+    setSpeichertEdit(false);
+
+    if (error) {
+      console.error('Kosten speichern fehlgeschlagen:', error);
+      setEditFehler(error.message || 'Speichern fehlgeschlagen.');
+      return;
     }
+    if (!data) {
+      console.error('Kosten speichern: Update betraf 0 Zeilen (vermutlich RLS-Berechtigung) für id', id);
+      setEditFehler('Speichern fehlgeschlagen: keine Berechtigung, diese Position zu ändern.');
+      return;
+    }
+
+    setKostenPositionen(prev => ({
+      ...prev,
+      [kategorie]: (prev[kategorie] ?? []).map(p => p.id === id ? data as KostenPosition : p),
+    }));
+    setBearbeitungId(null);
+    setBearbeitungKategorie(null);
   }
 
   async function positionHinzufuegen(kategorie: Kategorie) {
@@ -348,12 +366,13 @@ export default function KostenTab() {
                   placeholder="0,00"
                   className="w-24 text-right text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-amber-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
                 <span className="text-xs text-gray-400">€</span>
-                <button onClick={bearbeitungAbbrechen} className="text-xs text-gray-500 dark:text-gray-400 px-2 py-1 rounded border border-gray-200 dark:border-gray-600 hover:border-gray-400 transition-colors whitespace-nowrap">Abbrechen</button>
+                <button onClick={bearbeitungAbbrechen} disabled={speichertEdit} className="text-xs text-gray-500 dark:text-gray-400 px-2 py-1 rounded border border-gray-200 dark:border-gray-600 hover:border-gray-400 disabled:opacity-50 transition-colors whitespace-nowrap">Abbrechen</button>
                 <button onClick={positionAktualisieren}
-                  disabled={!editBezeichnung.trim() || (parseGermanNumber(editBetrag) ?? 0) <= 0}
+                  disabled={speichertEdit || !editBezeichnung.trim() || (parseGermanNumber(editBetrag) ?? 0) <= 0}
                   className="text-xs text-amber-500 hover:text-amber-700 dark:hover:text-amber-400 disabled:text-gray-300 dark:disabled:text-gray-600 disabled:cursor-not-allowed transition-colors whitespace-nowrap">
-                  Speichern
+                  {speichertEdit ? 'Speichert...' : 'Speichern'}
                 </button>
+                {editFehler && <span className="text-xs text-red-600 dark:text-red-400 basis-full">{editFehler}</span>}
               </div>
             </td>
           </tr>
@@ -488,12 +507,13 @@ export default function KostenTab() {
                       className="w-24 text-right text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-amber-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
                     <span className="text-xs text-gray-400">€</span>
                     {editBetrag && <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">= {editBetrag} €</span>}
-                    <button onClick={bearbeitungAbbrechen} className="text-xs text-gray-500 dark:text-gray-400 px-2 py-1 rounded border border-gray-200 dark:border-gray-600 hover:border-gray-400 transition-colors whitespace-nowrap">Abbrechen</button>
+                    <button onClick={bearbeitungAbbrechen} disabled={speichertEdit} className="text-xs text-gray-500 dark:text-gray-400 px-2 py-1 rounded border border-gray-200 dark:border-gray-600 hover:border-gray-400 disabled:opacity-50 transition-colors whitespace-nowrap">Abbrechen</button>
                     <button onClick={positionAktualisieren}
-                      disabled={!editBezeichnung.trim() || (parseGermanNumber(editBetrag) ?? 0) <= 0}
+                      disabled={speichertEdit || !editBezeichnung.trim() || (parseGermanNumber(editBetrag) ?? 0) <= 0}
                       className="text-xs text-amber-500 hover:text-amber-700 dark:hover:text-amber-400 disabled:text-gray-300 dark:disabled:text-gray-600 disabled:cursor-not-allowed transition-colors whitespace-nowrap">
-                      Speichern
+                      {speichertEdit ? 'Speichert...' : 'Speichern'}
                     </button>
+                    {editFehler && <span className="text-xs text-red-600 dark:text-red-400 basis-full">{editFehler}</span>}
                   </div>
                 </td>
               </tr>
