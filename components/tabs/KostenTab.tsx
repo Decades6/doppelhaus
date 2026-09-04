@@ -607,12 +607,7 @@ export default function KostenTab() {
             <tr className="bg-blue-100 dark:bg-blue-900/40 print-akzent-blau">
               <td className="px-6 py-4 font-semibold text-gray-800 dark:text-white">Hauskosten</td>
               <td className="px-6 py-4 text-right font-semibold text-gray-800 dark:text-white">
-                {brutto > 0 ? (
-                  <span className="inline-flex items-center justify-end gap-2">
-                    <Ampel bezahlt={bezahltNachKategorie['Bauträger'] ?? 0} gesamt={brutto} />
-                    {formatEuro(brutto)}
-                  </span>
-                ) : <span className="text-gray-400 text-xs">Kein Angebot geladen</span>}
+                {brutto > 0 ? formatEuro(brutto) : <span className="text-gray-400 text-xs">Kein Angebot geladen</span>}
               </td>
             </tr>
             {brutto > 0 && (
@@ -629,12 +624,12 @@ export default function KostenTab() {
             {/* Eigenleistung Materialkosten */}
             {materialGewerke.length > 0 && (
               <>
-                <tr className="bg-orange-100 dark:bg-orange-900/40 print-akzent-orange">
+                <tr className="bg-gray-200 dark:bg-gray-700 print-akzent-grau">
                   <td className="px-6 py-4 font-semibold text-gray-800 dark:text-white">
                     Eigenleistung Materialkosten
                     <span className="ml-2 text-xs font-normal text-gray-400">(eigene Materialien)</span>
                   </td>
-                  <td className="px-6 py-4 text-right font-semibold text-orange-600 dark:text-orange-400">
+                  <td className="px-6 py-4 text-right font-semibold text-gray-800 dark:text-white">
                     <div className="flex items-baseline justify-end">
                       <span className="w-20 text-right text-xs font-normal text-purple-500 dark:text-purple-400 mr-3">{gesamtStunden > 0 ? `${gesamtStunden.toLocaleString('de-DE')} Std.` : ''}</span>
                       <span className="w-32 text-right">{formatEuro(materialGesamt)}</span>
