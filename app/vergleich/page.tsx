@@ -7,8 +7,8 @@ import { formatEuro, formatDatum, formatDatumMitUhrzeit, comparePositionNr } fro
 import Link from 'next/link';
 import VersionenVerwalten from '@/components/VersionenVerwalten';
 
-type Aenderungstyp = 'neu' | 'entfernt' | 'preis' | 'beschreibung' | 'unveraendert';
-type Filter = 'alle' | 'aenderungen' | 'neu' | 'entfernt' | 'preis';
+type Aenderungstyp = 'neu' | 'entfernt' | 'geaendert' | 'unveraendert';
+type Filter = 'alle' | 'aenderungen' | 'neu' | 'entfernt' | 'preis' | 'menge';
 
 interface VergleichZeile {
   key: string;
@@ -18,8 +18,15 @@ interface VergleichZeile {
   beschreibung_neu?: string;
   gesamtpreis_alt?: number;
   gesamtpreis_neu?: number;
+  menge_alt?: number | null;
+  menge_neu?: number | null;
+  einheit_alt?: string | null;
+  einheit_neu?: string | null;
   differenz: number;
   aenderung: Aenderungstyp;
+  preisGeaendert: boolean;
+  mengeGeaendert: boolean;
+  beschreibungGeaendert: boolean;
   eventual: boolean;
   alternativ: boolean;
 }
@@ -46,11 +53,20 @@ function vergleiche(alt: Position[], neu: Position[]): VergleichZeile[] {
     const n = neuMap.get(key);
 
     let aenderung: Aenderungstyp;
-    if (!a) aenderung = 'neu';
-    else if (!n) aenderung = 'entfernt';
-    else if (Math.abs(a.gesamtpreis - n.gesamtpreis) > 0.01) aenderung = 'preis';
-    else if (a.beschreibung.trim() !== n.beschreibung.trim()) aenderung = 'beschreibung';
-    else aenderung = 'unveraendert';
+    let preisGeaendert = false;
+    let mengeGeaendert = false;
+    let beschreibungGeaendert = false;
+
+    if (!a) {
+      aenderung = 'neu';
+    } else if (!n) {
+      aenderung = 'entfernt';
+    } else {
+      preisGeaendert = Math.abs(a.gesamtpreis - n.gesamtpreis) > 0.01;
+      mengeGeaendert = Math.abs((a.menge ?? 0) - (n.menge ?? 0)) > 0.001 || (a.einheit ?? '') !== (n.einheit ?? '');
+      beschreibungGeaendert = a.beschreibung.trim() !== n.beschreibung.trim();
+      aenderung = preisGeaendert || mengeGeaendert || beschreibungGeaendert ? 'geaendert' : 'unveraendert';
+    }
 
     zeilen.push({
       key,
@@ -60,8 +76,15 @@ function vergleiche(alt: Position[], neu: Position[]): VergleichZeile[] {
       beschreibung_neu: n?.beschreibung,
       gesamtpreis_alt: a?.gesamtpreis,
       gesamtpreis_neu: n?.gesamtpreis,
+      menge_alt: a?.menge,
+      menge_neu: n?.menge,
+      einheit_alt: a?.einheit,
+      einheit_neu: n?.einheit,
       differenz: (n?.gesamtpreis ?? 0) - (a?.gesamtpreis ?? 0),
       aenderung,
+      preisGeaendert,
+      mengeGeaendert,
+      beschreibungGeaendert,
       eventual:  (n ?? a)!.eventual,
       alternativ: (n ?? a)!.alternativ,
     });
@@ -70,13 +93,25 @@ function vergleiche(alt: Position[], neu: Position[]): VergleichZeile[] {
   return zeilen.sort((x, y) => comparePositionNr(x.position_nr, y.position_nr));
 }
 
-const BADGE: Record<Aenderungstyp, { label: string; bg: string; text: string; row: string }> = {
-  neu:          { label: 'Neu',          bg: 'bg-green-100 dark:bg-green-900/40',  text: 'text-green-700 dark:text-green-400',  row: 'bg-green-50 dark:bg-green-900/20' },
-  entfernt:     { label: 'Entfernt',     bg: 'bg-red-100 dark:bg-red-900/40',      text: 'text-red-700 dark:text-red-400',      row: 'bg-red-50 dark:bg-red-900/20' },
-  preis:        { label: 'Preis',        bg: 'bg-orange-100 dark:bg-orange-900/40',text: 'text-orange-700 dark:text-orange-400',row: 'bg-orange-50 dark:bg-orange-900/20' },
-  beschreibung: { label: 'Beschreibung', bg: 'bg-blue-100 dark:bg-blue-900/40',    text: 'text-blue-700 dark:text-blue-400',    row: 'bg-blue-50 dark:bg-blue-900/20' },
-  unveraendert: { label: '',             bg: '',                                    text: '',                                    row: '' },
+const BADGE: Record<'neu' | 'entfernt', { label: string; bg: string; text: string }> = {
+  neu:      { label: 'Neu',      bg: 'bg-green-100 dark:bg-green-900/40', text: 'text-green-700 dark:text-green-400' },
+  entfernt: { label: 'Entfernt', bg: 'bg-red-100 dark:bg-red-900/40',     text: 'text-red-700 dark:text-red-400' },
 };
+
+const DETAIL_BADGE: Record<'preis' | 'menge' | 'beschreibung', { label: string; bg: string; text: string }> = {
+  preis:        { label: 'Preis',        bg: 'bg-orange-100 dark:bg-orange-900/40', text: 'text-orange-700 dark:text-orange-400' },
+  menge:        { label: 'Menge',        bg: 'bg-purple-100 dark:bg-purple-900/40', text: 'text-purple-700 dark:text-purple-400' },
+  beschreibung: { label: 'Text',         bg: 'bg-blue-100 dark:bg-blue-900/40',     text: 'text-blue-700 dark:text-blue-400' },
+};
+
+function zeilenFarbe(z: VergleichZeile): string {
+  if (z.aenderung === 'neu') return 'bg-green-50 dark:bg-green-900/20';
+  if (z.aenderung === 'entfernt') return 'bg-red-50 dark:bg-red-900/20';
+  if (z.mengeGeaendert) return 'bg-purple-50/50 dark:bg-purple-900/10';
+  if (z.preisGeaendert) return 'bg-orange-50/50 dark:bg-orange-900/10';
+  if (z.beschreibungGeaendert) return 'bg-blue-50/50 dark:bg-blue-900/10';
+  return '';
+}
 
 export default function VergleichPage() {
   const [versionen, setVersionen] = useState<Version[]>([]);
@@ -138,7 +173,11 @@ export default function VergleichPage() {
   const gefilterteZeilen = zeilen.filter(z => {
     if (filter === 'alle') return true;
     if (filter === 'aenderungen') return z.aenderung !== 'unveraendert';
-    return z.aenderung === filter;
+    if (filter === 'neu') return z.aenderung === 'neu';
+    if (filter === 'entfernt') return z.aenderung === 'entfernt';
+    if (filter === 'preis') return z.preisGeaendert;
+    if (filter === 'menge') return z.mengeGeaendert;
+    return true;
   });
 
   const pflichtig           = (z: VergleichZeile) => !z.eventual && !z.alternativ;
@@ -152,7 +191,8 @@ export default function VergleichPage() {
   const neuBrutto           = neuGesamtNetto * 1.19;
   const anzahlNeu      = zeilen.filter(z => z.aenderung === 'neu').length;
   const anzahlEntfernt = zeilen.filter(z => z.aenderung === 'entfernt').length;
-  const anzahlPreis    = zeilen.filter(z => z.aenderung === 'preis').length;
+  const anzahlPreis    = zeilen.filter(z => z.preisGeaendert).length;
+  const anzahlMenge    = zeilen.filter(z => z.mengeGeaendert).length;
 
   const gewerke = [...new Set(gefilterteZeilen.map(z => z.gewerk))];
 
@@ -220,7 +260,7 @@ export default function VergleichPage() {
       ) : (
         <>
           {/* Zusammenfassung */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-7 gap-4 mb-6">
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 border-l-4 border-gray-400">
               <div className="text-sm text-gray-500 dark:text-gray-400 mb-1">Preisdifferenz</div>
               <div className={`text-2xl font-bold ${gesamtDifferenz >= 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
@@ -251,6 +291,10 @@ export default function VergleichPage() {
               <div className="text-sm text-gray-500 dark:text-gray-400 mb-1">Entfernte / Geändert</div>
               <div className="text-2xl font-bold text-red-600 dark:text-red-400">{anzahlEntfernt + anzahlPreis}</div>
             </div>
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 border-l-4 border-purple-500">
+              <div className="text-sm text-gray-500 dark:text-gray-400 mb-1">Mengenänderungen</div>
+              <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">{anzahlMenge}</div>
+            </div>
           </div>
 
           {/* Filter */}
@@ -261,6 +305,7 @@ export default function VergleichPage() {
               ['neu',         'Neu'],
               ['entfernt',    'Entfernt'],
               ['preis',       'Preisänderung'],
+              ['menge',       'Mengenänderung'],
             ] as [Filter, string][]).map(([key, label]) => (
               <button
                 key={key}
@@ -309,28 +354,40 @@ export default function VergleichPage() {
                         <tr className="text-xs text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-600">
                           <th className="px-4 py-2 text-left font-medium w-20">Pos.</th>
                           <th className="px-4 py-2 text-left font-medium">Beschreibung</th>
+                          <th className="px-4 py-2 text-right font-medium w-32">Menge</th>
                           <th className="px-4 py-2 text-right font-medium w-32">Basis</th>
                           <th className="px-4 py-2 text-right font-medium w-32">Neu</th>
                           <th className="px-4 py-2 text-right font-medium w-28">Differenz</th>
-                          <th className="px-4 py-2 text-center font-medium w-28">Status</th>
+                          <th className="px-4 py-2 text-center font-medium w-32">Status</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-50">
                         {gwZeilen.map(z => {
-                          const stil = BADGE[z.aenderung];
+                          const mengeAltText = z.menge_alt != null ? `${z.menge_alt} ${z.einheit_alt ?? ''}`.trim() : null;
+                          const mengeNeuText = z.menge_neu != null ? `${z.menge_neu} ${z.einheit_neu ?? ''}`.trim() : null;
                           return (
-                            <tr key={z.key} className={stil.row}>
+                            <tr key={z.key} className={zeilenFarbe(z)}>
                               <td className="px-4 py-3 text-gray-400 dark:text-gray-500 text-xs whitespace-nowrap">
                                 {z.position_nr || '–'}
                               </td>
                               <td className="px-4 py-3 text-gray-800 dark:text-gray-200">
-                                {z.aenderung === 'beschreibung' ? (
+                                {z.beschreibungGeaendert ? (
                                   <div>
                                     <div className="line-through text-gray-400 dark:text-gray-500 text-xs">{z.beschreibung_alt}</div>
                                     <div>{z.beschreibung_neu}</div>
                                   </div>
                                 ) : (
                                   z.beschreibung_neu ?? z.beschreibung_alt
+                                )}
+                              </td>
+                              <td className="px-4 py-3 text-right whitespace-nowrap text-xs">
+                                {z.mengeGeaendert ? (
+                                  <div>
+                                    <div className="line-through text-gray-400 dark:text-gray-500">{mengeAltText ?? '–'}</div>
+                                    <div className="text-purple-600 dark:text-purple-400 font-medium">{mengeNeuText ?? '–'}</div>
+                                  </div>
+                                ) : (
+                                  <span className="text-gray-500 dark:text-gray-400">{mengeNeuText ?? mengeAltText ?? '–'}</span>
                                 )}
                               </td>
                               <td className="px-4 py-3 text-right text-gray-500 dark:text-gray-400 whitespace-nowrap">
@@ -347,11 +404,23 @@ export default function VergleichPage() {
                                   : '–'}
                               </td>
                               <td className="px-4 py-3 text-center">
-                                {stil.label && (
-                                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${stil.bg} ${stil.text}`}>
-                                    {stil.label}
-                                  </span>
-                                )}
+                                <div className="flex items-center justify-center gap-1 flex-wrap">
+                                  {z.aenderung === 'neu' && (
+                                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${BADGE.neu.bg} ${BADGE.neu.text}`}>{BADGE.neu.label}</span>
+                                  )}
+                                  {z.aenderung === 'entfernt' && (
+                                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${BADGE.entfernt.bg} ${BADGE.entfernt.text}`}>{BADGE.entfernt.label}</span>
+                                  )}
+                                  {z.preisGeaendert && (
+                                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${DETAIL_BADGE.preis.bg} ${DETAIL_BADGE.preis.text}`}>{DETAIL_BADGE.preis.label}</span>
+                                  )}
+                                  {z.mengeGeaendert && (
+                                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${DETAIL_BADGE.menge.bg} ${DETAIL_BADGE.menge.text}`}>{DETAIL_BADGE.menge.label}</span>
+                                  )}
+                                  {z.beschreibungGeaendert && (
+                                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${DETAIL_BADGE.beschreibung.bg} ${DETAIL_BADGE.beschreibung.text}`}>{DETAIL_BADGE.beschreibung.label}</span>
+                                  )}
+                                </div>
                               </td>
                             </tr>
                           );
