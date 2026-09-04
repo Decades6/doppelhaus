@@ -595,7 +595,7 @@ export default function KostenTab() {
               <th className="px-6 py-3 text-left font-semibold text-gray-700 dark:text-gray-200">Kostenstelle</th>
               <th className="px-6 py-3 text-right font-semibold text-gray-700 dark:text-gray-200 w-64">
                 <div className="flex items-baseline justify-end">
-                  <span className="w-20 text-right text-xs font-normal text-gray-500 dark:text-gray-400 mr-3">Arbeitsstunden</span>
+                  <span className="w-20 text-right mr-3">Arbeitsstunden</span>
                   <span className="w-32 text-right">Betrag</span>
                 </div>
               </th>
