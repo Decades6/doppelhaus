@@ -331,7 +331,8 @@ export default function KostenTab() {
   const baunebenkostenGesamt = baunebenkostenPositionen + anschluesseGesamt;
   const aussenanlagenGesamt = (kostenPositionen['aussenanlagen'] ?? []).reduce((s, p) => s + p.betrag, 0);
   const weitereKostenGesamt = WEITERE_KOSTEN_KEYS.reduce((s, k) => s + (kostenPositionen[k] ?? []).reduce((ss, p) => ss + p.betrag, 0), 0);
-  const gesamtFinanzierung = brutto + materialGesamt + baunebenkostenGesamt + aussenanlagenGesamt + weitereKostenGesamt;
+  const gesamtFinanzierung = brutto + materialGesamt + baunebenkostenGesamt + aussenanlagenGesamt;
+  const gesamtKosten = gesamtFinanzierung + weitereKostenGesamt;
 
   function renderKategorie(key: Kategorie) {
     const pos = kostenPositionen[key] ?? [];
@@ -778,14 +779,24 @@ export default function KostenTab() {
             {renderMengeEpKategorie('maschinen')}
             {renderMengeEpKategorie('sonstiges')}
 
-            {/* Gesamtsumme */}
+            {/* Gesamtfinanzierungsbedarf */}
+            <tr className="bg-gray-800 dark:bg-gray-900 print:bg-gray-200">
+              <td className="px-6 py-4 font-bold text-white print:text-gray-900 text-base">
+                Gesamtfinanzierungsbedarf
+                <div className="text-xs font-normal text-gray-400 mt-0.5">Hauskosten + Materialkosten + Baunebenkosten + Außenanlagen</div>
+              </td>
+              <td className="px-6 py-4 text-right font-bold text-white print:text-gray-900 text-lg">
+                {formatEuro(gesamtFinanzierung)}
+              </td>
+            </tr>
+            {/* Gesamtkosten */}
             <tr className="bg-gray-900 dark:bg-gray-950 print:bg-gray-100">
               <td className="px-6 py-5 font-bold text-white print:text-gray-900 text-base">
-                Gesamtfinanzierungsbedarf
-                <div className="text-xs font-normal text-gray-400 mt-0.5">Hauskosten + Materialkosten + Baunebenkosten + Außenanlagen + Weitere Kosten</div>
+                Gesamtkosten des Bauprojekts
+                <div className="text-xs font-normal text-gray-400 mt-0.5">Gesamtfinanzierungsbedarf + Weitere Kosten</div>
               </td>
               <td className="px-6 py-5 text-right font-bold text-white print:text-gray-900 text-xl">
-                {formatEuro(gesamtFinanzierung)}
+                {formatEuro(gesamtKosten)}
               </td>
             </tr>
           </tbody>
