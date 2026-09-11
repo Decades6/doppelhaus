@@ -335,12 +335,16 @@ export default function KostenTab() {
   const aussenanlagenGesamt = (kostenPositionen['aussenanlagen'] ?? []).reduce((s, p) => s + p.betrag, 0);
   const inventarGesamt = INVENTAR_KEYS.reduce((s, k) => s + (kostenPositionen[k] ?? []).reduce((ss, p) => ss + p.betrag, 0), 0);
   const weitereKostenGesamt = WEITERE_KOSTEN_KEYS.reduce((s, k) => s + (kostenPositionen[k] ?? []).reduce((ss, p) => ss + p.betrag, 0), 0);
-  const gesamtFinanzierung = grundstueckGesamt + brutto + materialGesamt + baunebenkostenGesamt + aussenanlagenGesamt;
-  const finanzierungInklInventar = gesamtFinanzierung + inventarGesamt;
-  const gesamtKosten = finanzierungInklInventar + weitereKostenGesamt;
-  // Grundstück ist i.d.R. bereits bezahlt, zählt aber weiterhin in den Finanzierungsbedarf
+  // Bruttosumme inkl. Grundstück — Basis für die Gesamtkosten
+  const finanzierungGesamt = grundstueckGesamt + brutto + materialGesamt + baunebenkostenGesamt + aussenanlagenGesamt;
+  // Das Grundstück ist i.d.R. schon bezahlt und muss nicht mehr finanziert werden.
+  // Abgezogen wird, was im Zahlungen-Tab auf "Grundstück" gebucht ist.
   const grundstueckBezahlt = bezahltNachKategorie[KATEGORIEN_NAMEN.grundstueck] ?? 0;
-  const nochZuFinanzieren = gesamtFinanzierung - grundstueckBezahlt;
+  const gesamtFinanzierung = finanzierungGesamt - grundstueckBezahlt;
+  const finanzierungInklInventar = gesamtFinanzierung + inventarGesamt;
+  // Gesamtkosten zeigen weiterhin das volle Projekt inkl. bereits bezahltem Grundstück,
+  // damit sie mit der Zahl im Übersicht-Tab übereinstimmen.
+  const gesamtKosten = finanzierungGesamt + inventarGesamt + weitereKostenGesamt;
 
   function renderKategorie(key: Kategorie) {
     const pos = kostenPositionen[key] ?? [];
@@ -757,7 +761,10 @@ export default function KostenTab() {
             <tr className="bg-gray-800 dark:bg-gray-900 print:bg-gray-200">
               <td className="px-6 py-4 font-bold text-white print:text-gray-900 text-base">
                 Gesamtfinanzierungsbedarf
-                <div className="text-xs font-normal text-gray-400 mt-0.5">Grundstück + Hauskosten + Materialkosten + Baunebenkosten + Außenanlagen</div>
+                <div className="text-xs font-normal text-gray-400 mt-0.5">
+                  Grundstück + Hauskosten + Materialkosten + Baunebenkosten + Außenanlagen
+                  {grundstueckBezahlt > 0 && ' − bereits bezahltes Grundstück'}
+                </div>
               </td>
               <td className="px-6 py-4 text-right font-bold text-white print:text-gray-900 text-lg">
                 {formatEuro(gesamtFinanzierung)}
@@ -766,10 +773,10 @@ export default function KostenTab() {
             {grundstueckBezahlt > 0 && (
               <tr className="bg-gray-50 dark:bg-gray-800/60">
                 <td className="px-6 py-2 pl-10 text-xs text-gray-500 dark:text-gray-400">
-                  davon Grundstück (bereits bezahlt): {formatEuro(grundstueckBezahlt)}
+                  inkl. bereits bezahltem Grundstück ({formatEuro(grundstueckBezahlt)})
                 </td>
                 <td className="px-6 py-2 text-right text-xs text-gray-500 dark:text-gray-400">
-                  noch zu finanzieren: {formatEuro(nochZuFinanzieren)}
+                  {formatEuro(finanzierungGesamt)}
                 </td>
               </tr>
             )}
@@ -813,7 +820,9 @@ export default function KostenTab() {
             <tr className="bg-gray-900 dark:bg-gray-950 print:bg-gray-100">
               <td className="px-6 py-5 font-bold text-white print:text-gray-900 text-base">
                 Gesamtkosten des Bauprojekts
-                <div className="text-xs font-normal text-gray-400 mt-0.5">Finanzierungsbedarf inkl. Inventar + Weitere Kosten</div>
+                <div className="text-xs font-normal text-gray-400 mt-0.5">
+                  Alle Kosten inkl. bereits bezahltem Grundstück, Inventar und Weiteren Kosten
+                </div>
               </td>
               <td className="px-6 py-5 text-right font-bold text-white print:text-gray-900 text-xl">
                 {formatEuro(gesamtKosten)}
