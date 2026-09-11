@@ -26,17 +26,22 @@ interface UebersichtDaten {
 type TabId = 'uebersicht' | 'angebot' | 'eigenleistungen' | 'kosten' | 'zahlungen';
 
 const KOSTEN_FARBEN: Record<string, string> = {
-  planung:        'bg-lime-500',
-  versicherungen: 'bg-yellow-500',
-  nebenkosten:    'bg-indigo-500',
-  notar:          'bg-purple-500',
-  baustelle:      'bg-rose-500',
-  erdarbeiten:    'bg-orange-500',
-  vermessung:     'bg-teal-500',
-  aussenanlagen:  'bg-lime-700',
-  kueche:         'bg-pink-500',
-  maschinen:      'bg-slate-500',
-  sonstiges:      'bg-gray-400',
+  grundstueck:        'bg-emerald-600',
+  planung:            'bg-lime-500',
+  versicherungen:     'bg-yellow-500',
+  nebenkosten:        'bg-indigo-500',
+  baustelle:          'bg-rose-500',
+  erdarbeiten:        'bg-orange-500',
+  vermessung:         'bg-teal-500',
+  aussenanlagen:      'bg-lime-700',
+  kueche:             'bg-pink-500',
+  hwr:                'bg-fuchsia-500',
+  abriss:             'bg-red-600',
+  erdarbeiten_abriss: 'bg-orange-700',
+  notar:              'bg-purple-500',
+  genehmigungen:      'bg-sky-500',
+  maschinen:          'bg-slate-500',
+  sonstiges:          'bg-gray-400',
 };
 
 export default function UebersichtTab({ onTabWechsel }: { onTabWechsel: (tab: TabId) => void }) {

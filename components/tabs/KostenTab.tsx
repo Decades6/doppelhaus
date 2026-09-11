@@ -24,25 +24,31 @@ const ANSCHLUSS_NAMEN: Record<keyof AnschlussKosten, string> = {
   telekomanschluss: 'Telekomanschluss',
 };
 
-export const KATEGORIEN = ['planung', 'versicherungen', 'nebenkosten', 'notar', 'baustelle', 'erdarbeiten', 'vermessung', 'aussenanlagen', 'kueche', 'maschinen', 'sonstiges'] as const;
+export const KATEGORIEN = ['grundstueck', 'planung', 'versicherungen', 'nebenkosten', 'baustelle', 'erdarbeiten', 'vermessung', 'aussenanlagen', 'kueche', 'hwr', 'abriss', 'erdarbeiten_abriss', 'notar', 'genehmigungen', 'maschinen', 'sonstiges'] as const;
 export type Kategorie = typeof KATEGORIEN[number];
 
 export const KATEGORIEN_NAMEN: Record<Kategorie, string> = {
+  grundstueck: 'Grundstück',
   planung: 'Planung & Genehmigung',
   versicherungen: 'Versicherungen',
   nebenkosten: 'Erschließung & Abgaben',
-  notar: 'Notar & Grundbuch',
   baustelle: 'Baustelle',
-  erdarbeiten: 'Erdarbeiten',
+  erdarbeiten: 'Erdarbeiten (Neubau)',
   vermessung: 'Vermessung',
   aussenanlagen: 'Außenanlagen',
   kueche: 'Küche',
+  hwr: 'HWR',
+  abriss: 'Abriss',
+  erdarbeiten_abriss: 'Erdarbeiten (Abriss)',
+  notar: 'Notar & Grundbuch',
+  genehmigungen: 'Genehmigungen',
   maschinen: 'Maschinen und Werkzeug',
   sonstiges: 'Sonstiges',
 };
 
-const BAUNEBENKOSTEN_KEYS: readonly Kategorie[] = ['planung', 'versicherungen', 'nebenkosten', 'notar', 'baustelle', 'erdarbeiten', 'vermessung'];
-const WEITERE_KOSTEN_KEYS: readonly Kategorie[] = ['kueche', 'maschinen', 'sonstiges'];
+const BAUNEBENKOSTEN_KEYS: readonly Kategorie[] = ['planung', 'versicherungen', 'nebenkosten', 'baustelle', 'erdarbeiten', 'vermessung'];
+const INVENTAR_KEYS: readonly Kategorie[] = ['kueche', 'hwr'];
+const WEITERE_KOSTEN_KEYS: readonly Kategorie[] = ['abriss', 'erdarbeiten_abriss', 'notar', 'genehmigungen', 'maschinen', 'sonstiges'];
 
 interface KostenPosition {
   id: string;
@@ -96,7 +102,6 @@ export default function KostenTab() {
   const [editEinzelpreis, setEditEinzelpreis] = useState('');
   const [speichertEdit, setSpeichertEdit] = useState(false);
   const [editFehler, setEditFehler] = useState('');
-  const [grundstueckspreisEingabe, setGrundstueckspreisEingabe] = useState('');
   const speicherTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [bezahltNachBeschreibung, setBezahltNachBeschreibung] = useState<Record<string, number>>({});
   const [bezahltNachKategorie, setBezahltNachKategorie] = useState<Record<string, number>>({});
@@ -321,18 +326,21 @@ export default function KostenTab() {
 
   const eigenleistungGesamt = eigenleistungGewerke.reduce((s, g) => s + g.eigenleistung_summe, 0);
   const brutto = version?.nettosumme ? (version.nettosumme - eigenleistungGesamt) * 1.19 : 0;
-  const grundstueckspreis = parseGermanNumber(grundstueckspreisEingabe) ?? 0;
-  const vorschlagNebenkosten = grundstueckspreis > 0 ? Math.round(grundstueckspreis * 0.055 * 100) / 100 : 0;
-  const vorschlagNotar = grundstueckspreis > 0 ? Math.round((grundstueckspreis + brutto) * 0.015 * 100) / 100 : 0;
   const materialGesamt = materialGewerke.reduce((s, g) => s + g.material_summe, 0);
   const anschluesseGesamt = Object.values(anschluesse).reduce((s, v) => s + v, 0);
   const gesamtStunden = Object.values(materialDetails).flat().reduce((s, m) => s + (m.zeitaufwand_stunden ?? 0), 0);
+  const grundstueckGesamt = (kostenPositionen['grundstueck'] ?? []).reduce((s, p) => s + p.betrag, 0);
   const baunebenkostenPositionen = BAUNEBENKOSTEN_KEYS.reduce((s, k) => s + (kostenPositionen[k] ?? []).reduce((ss, p) => ss + p.betrag, 0), 0);
   const baunebenkostenGesamt = baunebenkostenPositionen + anschluesseGesamt;
   const aussenanlagenGesamt = (kostenPositionen['aussenanlagen'] ?? []).reduce((s, p) => s + p.betrag, 0);
+  const inventarGesamt = INVENTAR_KEYS.reduce((s, k) => s + (kostenPositionen[k] ?? []).reduce((ss, p) => ss + p.betrag, 0), 0);
   const weitereKostenGesamt = WEITERE_KOSTEN_KEYS.reduce((s, k) => s + (kostenPositionen[k] ?? []).reduce((ss, p) => ss + p.betrag, 0), 0);
-  const gesamtFinanzierung = brutto + materialGesamt + baunebenkostenGesamt + aussenanlagenGesamt;
-  const gesamtKosten = gesamtFinanzierung + weitereKostenGesamt;
+  const gesamtFinanzierung = grundstueckGesamt + brutto + materialGesamt + baunebenkostenGesamt + aussenanlagenGesamt;
+  const finanzierungInklInventar = gesamtFinanzierung + inventarGesamt;
+  const gesamtKosten = finanzierungInklInventar + weitereKostenGesamt;
+  // Grundstück ist i.d.R. bereits bezahlt, zählt aber weiterhin in den Finanzierungsbedarf
+  const grundstueckBezahlt = bezahltNachKategorie[KATEGORIEN_NAMEN.grundstueck] ?? 0;
+  const nochZuFinanzieren = gesamtFinanzierung - grundstueckBezahlt;
 
   function renderKategorie(key: Kategorie) {
     const pos = kostenPositionen[key] ?? [];
@@ -604,6 +612,15 @@ export default function KostenTab() {
           </thead>
           <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
 
+            {/* ══ GRUNDSTÜCK ══ */}
+            <tr className="bg-gray-200 dark:bg-gray-700 print-akzent-grau">
+              <td className="px-6 py-3 font-bold text-gray-800 dark:text-white text-sm tracking-wide">Grundstück</td>
+              <td className="px-6 py-3 text-right font-bold text-gray-800 dark:text-white">
+                {grundstueckGesamt > 0 ? formatEuro(grundstueckGesamt) : <span className="text-gray-400 font-normal text-xs">—</span>}
+              </td>
+            </tr>
+            {renderKategorie('grundstueck')}
+
             {/* Hauskosten */}
             <tr className="bg-blue-100 dark:bg-blue-900/40 print-akzent-blau">
               <td className="px-6 py-4 font-semibold text-gray-800 dark:text-white">Hauskosten</td>
@@ -690,41 +707,9 @@ export default function KostenTab() {
               </td>
             </tr>
 
-            {/* Pauschale-Hilfe */}
-            <tr className="print:hidden bg-amber-50/50 dark:bg-amber-900/10">
-              <td colSpan={2} className="px-6 py-3 pl-8">
-                <div className="flex items-center gap-4 flex-wrap">
-                  <span className="text-xs text-amber-700 dark:text-amber-400 font-medium">Pauschale berechnen (Hamburg):</span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-500 dark:text-gray-400">Grundstückspreis</span>
-                    <input type="text" value={grundstueckspreisEingabe} onChange={e => setGrundstueckspreisEingabe(e.target.value)} placeholder="z.B. 300.000"
-                      className="w-36 text-right text-sm border border-amber-200 dark:border-amber-700 rounded-lg px-3 py-1 focus:outline-none focus:border-amber-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100" />
-                    <span className="text-xs text-gray-400">€</span>
-                  </div>
-                  {grundstueckspreis > 0 && (
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <button
-                        onClick={() => setNeuForm(prev => ({ ...prev, nebenkosten: { bezeichnung: 'Grunderwerbsteuer (5,5 %)', betrag: formatGermanNumber(vorschlagNebenkosten), menge: '', einzelpreis: '', unterkategorie: '' } }))}
-                        className="text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 px-3 py-1 rounded-full hover:bg-amber-200 transition-colors"
-                        title="Grunderwerbsteuer Hamburg: 5,5 % vom Grundstückspreis">
-                        Erschließung {formatEuro(vorschlagNebenkosten)} vorschlagen
-                      </button>
-                      <button
-                        onClick={() => setNeuForm(prev => ({ ...prev, notar: { bezeichnung: 'Notar & Grundbuch (1,5 %)', betrag: formatGermanNumber(vorschlagNotar), menge: '', einzelpreis: '', unterkategorie: '' } }))}
-                        className="text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 px-3 py-1 rounded-full hover:bg-amber-200 transition-colors"
-                        title="Notar + Grundbuch: 1,5 % von Grundstück + Baukosten">
-                        Notar {formatEuro(vorschlagNotar)} vorschlagen
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </td>
-            </tr>
-
             {renderKategorie('planung')}
             {renderKategorie('versicherungen')}
             {renderKategorie('nebenkosten')}
-            {renderKategorie('notar')}
 
             {/* Anschlüsse (feste Felder) */}
             <tr>
@@ -768,6 +753,48 @@ export default function KostenTab() {
             </tr>
             {renderKategorie('aussenanlagen')}
 
+            {/* Gesamtfinanzierungsbedarf */}
+            <tr className="bg-gray-800 dark:bg-gray-900 print:bg-gray-200">
+              <td className="px-6 py-4 font-bold text-white print:text-gray-900 text-base">
+                Gesamtfinanzierungsbedarf
+                <div className="text-xs font-normal text-gray-400 mt-0.5">Grundstück + Hauskosten + Materialkosten + Baunebenkosten + Außenanlagen</div>
+              </td>
+              <td className="px-6 py-4 text-right font-bold text-white print:text-gray-900 text-lg">
+                {formatEuro(gesamtFinanzierung)}
+              </td>
+            </tr>
+            {grundstueckBezahlt > 0 && (
+              <tr className="bg-gray-50 dark:bg-gray-800/60">
+                <td className="px-6 py-2 pl-10 text-xs text-gray-500 dark:text-gray-400">
+                  davon Grundstück (bereits bezahlt): {formatEuro(grundstueckBezahlt)}
+                </td>
+                <td className="px-6 py-2 text-right text-xs text-gray-500 dark:text-gray-400">
+                  noch zu finanzieren: {formatEuro(nochZuFinanzieren)}
+                </td>
+              </tr>
+            )}
+
+            {/* ══ INVENTAR ══ */}
+            <tr className="bg-gray-200 dark:bg-gray-700 print-akzent-grau">
+              <td className="px-6 py-3 font-bold text-gray-800 dark:text-white text-sm tracking-wide">Inventar</td>
+              <td className="px-6 py-3 text-right font-bold text-gray-800 dark:text-white">
+                {inventarGesamt > 0 ? formatEuro(inventarGesamt) : <span className="text-gray-400 font-normal text-xs">—</span>}
+              </td>
+            </tr>
+            {renderKategorie('kueche')}
+            {renderKategorie('hwr')}
+
+            {/* Finanzierungsbedarf inkl. Inventar */}
+            <tr className="bg-gray-800 dark:bg-gray-900 print:bg-gray-200">
+              <td className="px-6 py-4 font-bold text-white print:text-gray-900 text-base">
+                Finanzierungsbedarf inkl. Inventar
+                <div className="text-xs font-normal text-gray-400 mt-0.5">Gesamtfinanzierungsbedarf + Inventar</div>
+              </td>
+              <td className="px-6 py-4 text-right font-bold text-white print:text-gray-900 text-lg">
+                {formatEuro(finanzierungInklInventar)}
+              </td>
+            </tr>
+
             {/* ══ WEITERE KOSTEN ══ */}
             <tr className="bg-gray-200 dark:bg-gray-700 print-akzent-grau">
               <td className="px-6 py-3 font-bold text-gray-800 dark:text-white text-sm tracking-wide">Weitere Kosten</td>
@@ -775,25 +802,18 @@ export default function KostenTab() {
                 {weitereKostenGesamt > 0 ? formatEuro(weitereKostenGesamt) : <span className="text-gray-400 font-normal text-xs">—</span>}
               </td>
             </tr>
-            {renderKategorie('kueche')}
+            {renderKategorie('abriss')}
+            {renderKategorie('erdarbeiten_abriss')}
+            {renderKategorie('notar')}
+            {renderKategorie('genehmigungen')}
             {renderMengeEpKategorie('maschinen')}
             {renderMengeEpKategorie('sonstiges')}
 
-            {/* Gesamtfinanzierungsbedarf */}
-            <tr className="bg-gray-800 dark:bg-gray-900 print:bg-gray-200">
-              <td className="px-6 py-4 font-bold text-white print:text-gray-900 text-base">
-                Gesamtfinanzierungsbedarf
-                <div className="text-xs font-normal text-gray-400 mt-0.5">Hauskosten + Materialkosten + Baunebenkosten + Außenanlagen</div>
-              </td>
-              <td className="px-6 py-4 text-right font-bold text-white print:text-gray-900 text-lg">
-                {formatEuro(gesamtFinanzierung)}
-              </td>
-            </tr>
             {/* Gesamtkosten */}
             <tr className="bg-gray-900 dark:bg-gray-950 print:bg-gray-100">
               <td className="px-6 py-5 font-bold text-white print:text-gray-900 text-base">
                 Gesamtkosten des Bauprojekts
-                <div className="text-xs font-normal text-gray-400 mt-0.5">Gesamtfinanzierungsbedarf + Weitere Kosten</div>
+                <div className="text-xs font-normal text-gray-400 mt-0.5">Finanzierungsbedarf inkl. Inventar + Weitere Kosten</div>
               </td>
               <td className="px-6 py-5 text-right font-bold text-white print:text-gray-900 text-xl">
                 {formatEuro(gesamtKosten)}

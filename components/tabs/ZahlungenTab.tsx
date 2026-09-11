@@ -4,28 +4,20 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Zahlung } from '@/lib/types';
 import { formatEuro, parseGermanNumber, formatGermanNumber } from '@/lib/utils';
+import { KATEGORIEN_NAMEN } from '@/components/tabs/KostenTab';
 
-const KATEGORIEN = ['Bauträger', 'Nebenkosten', 'Notar/Grundbuch', 'Vermessung', 'Anschlüsse', 'Erdarbeiten', 'Küche', 'Material', 'Eigenleistung', 'Maschinen und Werkzeug', 'Sonstiges'];
+// Kategorien, die es nur bei Zahlungen gibt (keine Kostenpositionen-Kategorie).
+// "Anschlüsse" wird im Kosten-Tab über genau diesen Namen zugeordnet.
+const ZUSATZ_KATEGORIEN = ['Bauträger', 'Material', 'Eigenleistung', 'Anschlüsse'];
 
-const KOSTEN_KAT_NAMEN: Record<string, string> = {
-  nebenkosten: 'Nebenkosten',
-  notar: 'Notar',
-  vermessung: 'Vermessung',
-  erdarbeiten: 'Erdarbeiten',
-  kueche: 'Küche',
-  maschinen: 'Maschinen und Werkzeug',
-  sonstiges: 'Sonstiges',
-};
+// Eine gemeinsame Liste für beide Tabs: nur wenn die Namen identisch sind,
+// findet die Ampel im Kosten-Tab die zugehörigen Zahlungen.
+const KATEGORIEN = [...ZUSATZ_KATEGORIEN, ...Object.values(KATEGORIEN_NAMEN)];
 
-const KOSTEN_ZU_ZAHLUNG: Record<string, string> = {
-  notar: 'Notar/Grundbuch',
-  nebenkosten: 'Nebenkosten',
-  vermessung: 'Vermessung',
-  erdarbeiten: 'Erdarbeiten',
-  kueche: 'Küche',
-  maschinen: 'Maschinen und Werkzeug',
-  sonstiges: 'Sonstiges',
-};
+/** Kostenpositions-Kategorie (z.B. "kueche") → Zahlungs-Kategoriename (z.B. "Küche") */
+function kostenZuZahlung(kategorie: string): string {
+  return KATEGORIEN_NAMEN[kategorie as keyof typeof KATEGORIEN_NAMEN] ?? 'Sonstiges';
+}
 
 interface KostenVorlage { id: string; kategorie: string; bezeichnung: string; betrag: number; }
 interface EigenleistungVorlage { id: string; gewerk: string; bezeichnung: string; gesamtpreis: number; }
@@ -85,7 +77,7 @@ export default function ZahlungenTab() {
         ...p,
         beschreibung: v.bezeichnung,
         betrag: formatGermanNumber(rest),
-        kategorie: KOSTEN_ZU_ZAHLUNG[v.kategorie] ?? 'Sonstiges',
+        kategorie: kostenZuZahlung(v.kategorie),
       }));
     }
   }
@@ -145,7 +137,7 @@ export default function ZahlungenTab() {
   const planungSummen = (() => {
     const acc: Record<string, number> = {};
     for (const v of kostenVorlagen) {
-      const kat = KOSTEN_ZU_ZAHLUNG[v.kategorie] ?? 'Sonstiges';
+      const kat = kostenZuZahlung(v.kategorie);
       acc[kat] = (acc[kat] ?? 0) + v.betrag;
     }
     for (const e of eigenleistungVorlagen) {
@@ -210,7 +202,7 @@ export default function ZahlungenTab() {
                 className="w-full text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100">
                 <option value="">– Kostenpunkt oder Eigenleistung wählen –</option>
                 {offeneKosten.length > 0 && kostenKategorien.map(kat => (
-                  <optgroup key={kat} label={KOSTEN_KAT_NAMEN[kat] ?? kat}>
+                  <optgroup key={kat} label={kostenZuZahlung(kat)}>
                     {offeneKosten.filter(v => v.kategorie === kat).map(v => {
                       const rest = v.betrag - v.bezahlt;
                       return (
