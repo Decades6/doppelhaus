@@ -111,9 +111,9 @@ export default function UebersichtTab({ onTabWechsel }: { onTabWechsel: (tab: Ta
   const bautraegerBrutto = (daten.nettosumme - daten.eigenleistungNetto) * 1.19;
   const kostenPosGesamt = Object.values(daten.kostenNachKategorie).reduce((s, v) => s + v, 0);
   const weitereKosten = daten.anschluesseGesamt + kostenPosGesamt;
-  const gesamtFinanzierung = bautraegerBrutto + daten.materialkosten + weitereKosten;
-  const nochOffen = Math.max(0, gesamtFinanzierung - daten.bezahlt);
-  const fortschritt = gesamtFinanzierung > 0 ? Math.min(100, (daten.bezahlt / gesamtFinanzierung) * 100) : 0;
+  const gesamtKosten = bautraegerBrutto + daten.materialkosten + weitereKosten;
+  const nochOffen = Math.max(0, gesamtKosten - daten.bezahlt);
+  const fortschritt = gesamtKosten > 0 ? Math.min(100, (daten.bezahlt / gesamtKosten) * 100) : 0;
 
   // Alle Kostenstellen für den Verteilungsbalken
   const kostenstellen: KostenKategorie[] = [
@@ -129,8 +129,8 @@ export default function UebersichtTab({ onTabWechsel }: { onTabWechsel: (tab: Ta
       {/* Hauptkennzahlen */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border-l-4 border-gray-700 dark:border-gray-500">
-          <div className="text-sm text-gray-500 dark:text-gray-400 mb-1">Gesamtfinanzierungsbedarf</div>
-          <div className="text-2xl font-bold text-gray-900 dark:text-white">{formatEuro(gesamtFinanzierung)}</div>
+          <div className="text-sm text-gray-500 dark:text-gray-400 mb-1">Gesamtkosten des Bauprojekts</div>
+          <div className="text-2xl font-bold text-gray-900 dark:text-white">{formatEuro(gesamtKosten)}</div>
           <div className="text-xs text-gray-400 mt-1">inkl. aller Kosten & MwSt.</div>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border-l-4 border-green-500">
@@ -171,8 +171,8 @@ export default function UebersichtTab({ onTabWechsel }: { onTabWechsel: (tab: Ta
               <div
                 key={k.name}
                 className={`${k.farbe} h-full transition-all`}
-                style={{ width: `${(k.betrag / gesamtFinanzierung) * 100}%` }}
-                title={`${k.name}: ${formatEuro(k.betrag)} (${Math.round((k.betrag / gesamtFinanzierung) * 100)}%)`}
+                style={{ width: `${(k.betrag / gesamtKosten) * 100}%` }}
+                title={`${k.name}: ${formatEuro(k.betrag)} (${Math.round((k.betrag / gesamtKosten) * 100)}%)`}
               />
             ))}
           </div>
@@ -180,7 +180,7 @@ export default function UebersichtTab({ onTabWechsel }: { onTabWechsel: (tab: Ta
           {/* Legende */}
           <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
             {kostenstellen.map(k => {
-              const prozent = Math.round((k.betrag / gesamtFinanzierung) * 100);
+              const prozent = Math.round((k.betrag / gesamtKosten) * 100);
               return (
                 <div key={k.name} className="flex items-start gap-2">
                   <div className={`w-3 h-3 rounded-sm ${k.farbe} shrink-0 mt-0.5`} />
