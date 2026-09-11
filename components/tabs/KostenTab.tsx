@@ -342,6 +342,7 @@ export default function KostenTab() {
   const grundstueckBezahlt = bezahltNachKategorie[KATEGORIEN_NAMEN.grundstueck] ?? 0;
   const gesamtFinanzierung = finanzierungGesamt - grundstueckBezahlt;
   const finanzierungInklInventar = gesamtFinanzierung + inventarGesamt;
+  const finanzierungInklInventarGesamt = finanzierungGesamt + inventarGesamt;
   // Gesamtkosten zeigen weiterhin das volle Projekt inkl. bereits bezahltem Grundstück,
   // damit sie mit der Zahl im Übersicht-Tab übereinstimmen.
   const gesamtKosten = finanzierungGesamt + inventarGesamt + weitereKostenGesamt;
@@ -801,6 +802,16 @@ export default function KostenTab() {
                 {formatEuro(finanzierungInklInventar)}
               </td>
             </tr>
+            {grundstueckBezahlt > 0 && (
+              <tr className="bg-gray-50 dark:bg-gray-800/60">
+                <td className="px-6 py-2 pl-10 text-xs text-gray-500 dark:text-gray-400">
+                  inkl. bereits bezahltem Grundstück ({formatEuro(grundstueckBezahlt)})
+                </td>
+                <td className="px-6 py-2 text-right text-xs text-gray-500 dark:text-gray-400">
+                  {formatEuro(finanzierungInklInventarGesamt)}
+                </td>
+              </tr>
+            )}
 
             {/* ══ WEITERE KOSTEN ══ */}
             <tr className="bg-gray-200 dark:bg-gray-700 print-akzent-grau">
