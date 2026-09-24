@@ -15,7 +15,42 @@ function icsDate(datum: string, uhrzeit: string | null): string {
   return `${datum.replace(/-/g, '')}T${h}${m}00`;
 }
 
-function termineZuIcs(termine: Termin[], kalenderName: string): string {
+/** Folgetag als YYYYMMDD — für DTEND ganztägiger Termine (Ende ist exklusiv).
+ *  Rechnet bewusst in UTC, sonst verschiebt die Serverzeitzone das Datum. */
+function naechsterTagIcs(datum: string): string {
+  const d = new Date(datum + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().split('T')[0].replace(/-/g, '');
+}
+
+interface Zahlungsziel {
+  id: string;
+  bezeichnung: string;
+  betrag: number;
+  zahlungsziel: string;
+}
+
+function formatEuro(betrag: number): string {
+  return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(betrag);
+}
+
+/** Ganztägige Termine für offene Zahlungsziele — nur für den Besitzer des Tokens. */
+function zahlungszieleZuVevents(ziele: Zahlungsziel[], jetzt: string): string[] {
+  return ziele.map(z => {
+    return [
+      'BEGIN:VEVENT',
+      `UID:zahlungsziel-${z.id}@doppelhaus`,
+      `DTSTAMP:${jetzt}`,
+      `DTSTART;VALUE=DATE:${z.zahlungsziel.replace(/-/g, '')}`,
+      `DTEND;VALUE=DATE:${naechsterTagIcs(z.zahlungsziel)}`,
+      `SUMMARY:${icsEscapen(`Zahlung fällig: ${z.bezeichnung}`)}`,
+      `DESCRIPTION:${icsEscapen(`Offener Betrag: ${formatEuro(z.betrag)}`)}`,
+      'END:VEVENT',
+    ].join('\r\n');
+  });
+}
+
+function termineZuIcs(termine: Termin[], kalenderName: string, zusatzEvents: string[] = []): string {
   const events = termine.map(t => {
     const uid = `${t.id}@doppelhaus`;
     const dtstamp = new Date(t.created_at).toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
@@ -29,11 +64,8 @@ function termineZuIcs(termine: Termin[], kalenderName: string): string {
       dtend = `DTEND:${icsDate(t.datum, endZeit)}`;
     } else {
       // Ganztägiger Termin — Endedatum ist Tag + 1
-      const endDatum = new Date(t.datum + 'T00:00:00');
-      endDatum.setDate(endDatum.getDate() + 1);
-      const endIso = endDatum.toISOString().split('T')[0].replace(/-/g, '');
       dtstart = `DTSTART;VALUE=DATE:${t.datum.replace(/-/g, '')}`;
-      dtend = `DTEND;VALUE=DATE:${endIso}`;
+      dtend = `DTEND;VALUE=DATE:${naechsterTagIcs(t.datum)}`;
     }
 
     const lines = [
@@ -59,6 +91,7 @@ function termineZuIcs(termine: Termin[], kalenderName: string): string {
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     ...events,
+    ...zusatzEvents,
     'END:VCALENDAR',
   ].join('\r\n');
 }
@@ -91,7 +124,39 @@ export async function GET(request: NextRequest) {
     return new NextResponse('Fehler beim Laden der Termine', { status: 500 });
   }
 
-  const ics = termineZuIcs((termine ?? []) as Termin[], 'Doppelhaus Baukalender');
+  // Zahlungsziele gehören nur dem Besitzer des Tokens — Kostenpositionen sind
+  // pro Konto privat und dürfen nicht im gemeinsamen Kalender aller landen.
+  const [{ data: kostenPos }, { data: zahlungen }] = await Promise.all([
+    supabaseAdmin
+      .from('kosten_positionen')
+      .select('id, bezeichnung, betrag, zahlungsziel')
+      .eq('user_id', tokenRow.user_id)
+      .not('zahlungsziel', 'is', null),
+    supabaseAdmin
+      .from('zahlungen')
+      .select('beschreibung, betrag')
+      .eq('user_id', tokenRow.user_id),
+  ]);
+
+  // Bereits vollständig bezahlte Posten nicht mehr als Termin ausliefern.
+  // Zuordnung über die Beschreibung — dieselbe Logik wie die Ampel im Kosten-Tab.
+  const bezahltNachBeschreibung: Record<string, number> = {};
+  for (const z of (zahlungen ?? []) as { beschreibung: string; betrag: number }[]) {
+    const schluessel = z.beschreibung.trim().toLowerCase();
+    bezahltNachBeschreibung[schluessel] = (bezahltNachBeschreibung[schluessel] ?? 0) + z.betrag;
+  }
+
+  const offeneZiele = ((kostenPos ?? []) as Zahlungsziel[]).filter(p => {
+    const bezahlt = bezahltNachBeschreibung[p.bezeichnung.trim().toLowerCase()] ?? 0;
+    return bezahlt < p.betrag;
+  });
+
+  const jetzt = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+  const ics = termineZuIcs(
+    (termine ?? []) as Termin[],
+    'Doppelhaus Baukalender',
+    zahlungszieleZuVevents(offeneZiele, jetzt),
+  );
 
   return new NextResponse(ics, {
     headers: {

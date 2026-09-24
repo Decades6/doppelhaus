@@ -57,6 +57,32 @@ interface KostenPosition {
   betrag: number;
   menge?: string | null;
   unterkategorie?: string | null;
+  zahlungsziel?: string | null;
+}
+
+/** Zeigt das Zahlungsziel als farbigen Hinweis: rot wenn überfällig, orange wenn bald fällig. */
+function Zahlungsziel({ datum, bezahlt, gesamt }: { datum: string; bezahlt: number; gesamt: number }) {
+  const heute = new Date();
+  heute.setHours(0, 0, 0, 0);
+  const ziel = new Date(datum + 'T00:00:00');
+  const tage = Math.round((ziel.getTime() - heute.getTime()) / 86400000);
+  const istBezahlt = gesamt > 0 && bezahlt >= gesamt;
+
+  const stil = istBezahlt
+    ? 'text-gray-400 dark:text-gray-500'
+    : tage < 0
+      ? 'text-red-600 dark:text-red-400 font-medium'
+      : tage <= 14
+        ? 'text-amber-600 dark:text-amber-400 font-medium'
+        : 'text-gray-500 dark:text-gray-400';
+
+  const zusatz = istBezahlt ? '' : tage < 0 ? ` (${-tage} T. überfällig)` : tage === 0 ? ' (heute)' : ` (in ${tage} T.)`;
+
+  return (
+    <span className={`ml-2 text-xs whitespace-nowrap ${stil}`}>
+      fällig {ziel.toLocaleDateString('de-DE')}{zusatz}
+    </span>
+  );
 }
 
 interface EigenleistungGewerk {
@@ -72,7 +98,7 @@ interface MaterialGewerk {
 }
 
 
-const LEER_FORM = { bezeichnung: '', betrag: '', menge: '', einzelpreis: '', unterkategorie: '' };
+const LEER_FORM = { bezeichnung: '', betrag: '', menge: '', einzelpreis: '', unterkategorie: '', zahlungsziel: '' };
 
 function Ampel({ bezahlt, gesamt }: { bezahlt: number; gesamt: number }) {
   if (gesamt <= 0) return null;
@@ -88,7 +114,7 @@ export default function KostenTab() {
   const [anschluesse, setAnschluesse] = useState<AnschlussKosten>(LEER_ANSCHLUESSE);
   const [anschlussEingaben, setAnschlussEingaben] = useState<Record<string, string>>({});
   const [kostenPositionen, setKostenPositionen] = useState<Record<string, KostenPosition[]>>({});
-  const [neuForm, setNeuForm] = useState<Record<string, { bezeichnung: string; betrag: string; menge: string; einzelpreis: string; unterkategorie: string }>>({});
+  const [neuForm, setNeuForm] = useState<Record<string, { bezeichnung: string; betrag: string; menge: string; einzelpreis: string; unterkategorie: string; zahlungsziel: string }>>({});
   const [materialDetails, setMaterialDetails] = useState<Record<string, EigenleistungMaterial[]>>({});
   const [aufgeklappteGewerke, setAufgeklappteGewerke] = useState<Set<string>>(new Set());
   const [laden, setLaden] = useState(true);
@@ -100,6 +126,7 @@ export default function KostenTab() {
   const [editBetrag, setEditBetrag] = useState('');
   const [editMenge, setEditMenge] = useState('');
   const [editEinzelpreis, setEditEinzelpreis] = useState('');
+  const [editZahlungsziel, setEditZahlungsziel] = useState('');
   const [speichertEdit, setSpeichertEdit] = useState(false);
   const [editFehler, setEditFehler] = useState('');
   const speicherTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -151,7 +178,7 @@ export default function KostenTab() {
 
     const [{ data: anschlussRows }, { data: positionen }, { data: z }] = await Promise.all([
       supabase.from('kosten_manuell').select('schluessel, betrag'),
-      supabase.from('kosten_positionen').select('id, kategorie, bezeichnung, betrag, menge, unterkategorie').order('created_at', { ascending: true }),
+      supabase.from('kosten_positionen').select('id, kategorie, bezeichnung, betrag, menge, unterkategorie, zahlungsziel').order('created_at', { ascending: true }),
       supabase.from('zahlungen').select('beschreibung, kategorie, betrag'),
     ]);
 
@@ -213,6 +240,7 @@ export default function KostenTab() {
     setEditBezeichnung(pos.bezeichnung);
     setEditUnterkategorie(pos.unterkategorie ?? '');
     setEditBetrag(formatGermanNumber(pos.betrag));
+    setEditZahlungsziel(pos.zahlungsziel ?? '');
     const menge = pos.menge ?? '';
     setEditMenge(menge);
     const mengeNum = parseFloat(menge.replace(',', '.'));
@@ -266,15 +294,16 @@ export default function KostenTab() {
     const kategorie = bearbeitungKategorie;
     const menge = editMenge.trim() || null;
     const unterkategorie = editUnterkategorie.trim() || null;
+    const zahlungsziel = editZahlungsziel.trim() || null;
 
     setSpeichertEdit(true);
     setEditFehler('');
 
     const { data, error } = await supabase
       .from('kosten_positionen')
-      .update({ bezeichnung: editBezeichnung.trim(), betrag, menge, unterkategorie })
+      .update({ bezeichnung: editBezeichnung.trim(), betrag, menge, unterkategorie, zahlungsziel })
       .eq('id', id)
-      .select('id, kategorie, bezeichnung, betrag, menge, unterkategorie')
+      .select('id, kategorie, bezeichnung, betrag, menge, unterkategorie, zahlungsziel')
       .maybeSingle();
 
     setSpeichertEdit(false);
@@ -306,11 +335,12 @@ export default function KostenTab() {
 
     const menge = f.menge?.trim() || null;
     const unterkategorie = f.unterkategorie?.trim() || null;
+    const zahlungsziel = f.zahlungsziel?.trim() || null;
 
     const { data: { user } } = await supabase.auth.getUser();
     const { data, error } = await supabase
       .from('kosten_positionen')
-      .insert({ user_id: user?.id, kategorie, bezeichnung: f.bezeichnung.trim(), betrag, menge, unterkategorie })
+      .insert({ user_id: user?.id, kategorie, bezeichnung: f.bezeichnung.trim(), betrag, menge, unterkategorie, zahlungsziel })
       .select().single();
 
     if (!error && data) {
@@ -379,6 +409,11 @@ export default function KostenTab() {
                   placeholder="0,00"
                   className="w-24 text-right text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-amber-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
                 <span className="text-xs text-gray-400">€</span>
+                <label className="text-xs text-gray-400 whitespace-nowrap">fällig</label>
+                <input type="date" value={editZahlungsziel}
+                  onChange={e => setEditZahlungsziel(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && positionAktualisieren()}
+                  className="w-36 text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-amber-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
                 <button onClick={bearbeitungAbbrechen} disabled={speichertEdit} className="text-xs text-gray-500 dark:text-gray-400 px-2 py-1 rounded border border-gray-200 dark:border-gray-600 hover:border-gray-400 disabled:opacity-50 transition-colors whitespace-nowrap">Abbrechen</button>
                 <button onClick={positionAktualisieren}
                   disabled={speichertEdit || !editBezeichnung.trim() || (parseGermanNumber(editBetrag) ?? 0) <= 0}
@@ -393,7 +428,14 @@ export default function KostenTab() {
       }
       return (
         <tr key={p.id} className="print-kein-trennstrich">
-          <td className="px-6 py-1.5 pl-14 text-xs text-gray-500 dark:text-gray-400">{p.bezeichnung}</td>
+          <td className="px-6 py-1.5 pl-14 text-xs text-gray-500 dark:text-gray-400">
+            {p.bezeichnung}
+            {p.zahlungsziel && (
+              <Zahlungsziel datum={p.zahlungsziel}
+                bezahlt={bezahltNachBeschreibung[p.bezeichnung.trim().toLowerCase()] ?? 0}
+                gesamt={p.betrag} />
+            )}
+          </td>
           <td className="px-6 py-1.5 text-right text-xs text-gray-600 dark:text-gray-300">
             <span className="inline-flex items-center justify-end gap-2">
               <Ampel bezahlt={bezahltNachBeschreibung[p.bezeichnung.trim().toLowerCase()] ?? 0} gesamt={p.betrag} />
@@ -467,6 +509,11 @@ export default function KostenTab() {
                 placeholder="0,00"
                 className="w-24 text-right text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
               <span className="text-xs text-gray-400">€</span>
+              <label className="text-xs text-gray-400 whitespace-nowrap">fällig</label>
+              <input type="date" value={form.zahlungsziel}
+                onChange={e => setNeuForm(prev => ({ ...prev, [key]: { ...prev[key] ?? LEER_FORM, zahlungsziel: e.target.value } }))}
+                onKeyDown={e => e.key === 'Enter' && positionHinzufuegen(key)}
+                className="w-36 text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
               <button onClick={() => positionHinzufuegen(key)}
                 disabled={!form.bezeichnung.trim() || (parseGermanNumber(form.betrag) ?? 0) <= 0}
                 className="text-xs text-blue-500 hover:text-blue-700 dark:hover:text-blue-400 disabled:text-gray-300 dark:disabled:text-gray-600 disabled:cursor-not-allowed transition-colors whitespace-nowrap">
@@ -520,6 +567,11 @@ export default function KostenTab() {
                       className="w-24 text-right text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-amber-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
                     <span className="text-xs text-gray-400">€</span>
                     {editBetrag && <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">= {editBetrag} €</span>}
+                    <label className="text-xs text-gray-400 whitespace-nowrap">fällig</label>
+                    <input type="date" value={editZahlungsziel}
+                      onChange={e => setEditZahlungsziel(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && positionAktualisieren()}
+                      className="w-36 text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-amber-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
                     <button onClick={bearbeitungAbbrechen} disabled={speichertEdit} className="text-xs text-gray-500 dark:text-gray-400 px-2 py-1 rounded border border-gray-200 dark:border-gray-600 hover:border-gray-400 disabled:opacity-50 transition-colors whitespace-nowrap">Abbrechen</button>
                     <button onClick={positionAktualisieren}
                       disabled={speichertEdit || !editBezeichnung.trim() || (parseGermanNumber(editBetrag) ?? 0) <= 0}
@@ -537,6 +589,11 @@ export default function KostenTab() {
               <td className="px-6 py-1.5 pl-14 text-xs text-gray-500 dark:text-gray-400">
                 {p.menge && <span className="mr-1.5 text-gray-400">{p.menge}×</span>}
                 {p.bezeichnung}
+                {p.zahlungsziel && (
+                  <Zahlungsziel datum={p.zahlungsziel}
+                    bezahlt={bezahltNachBeschreibung[p.bezeichnung.trim().toLowerCase()] ?? 0}
+                    gesamt={p.betrag} />
+                )}
               </td>
               <td className="px-6 py-1.5 text-right text-xs text-gray-600 dark:text-gray-300">
                 <span className="inline-flex items-center justify-end gap-2">
@@ -570,6 +627,11 @@ export default function KostenTab() {
                 className="w-24 text-right text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
               <span className="text-xs text-gray-400">€</span>
               {form.betrag && <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">= {form.betrag} €</span>}
+              <label className="text-xs text-gray-400 whitespace-nowrap">fällig</label>
+              <input type="date" value={form.zahlungsziel}
+                onChange={e => setNeuForm(prev => ({ ...prev, [key]: { ...prev[key] ?? LEER_FORM, zahlungsziel: e.target.value } }))}
+                onKeyDown={e => e.key === 'Enter' && positionHinzufuegen(key)}
+                className="w-36 text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" />
               <button onClick={() => positionHinzufuegen(key)}
                 disabled={!form.bezeichnung.trim() || (parseGermanNumber(form.betrag) ?? 0) <= 0}
                 className="text-xs text-blue-500 hover:text-blue-700 dark:hover:text-blue-400 disabled:text-gray-300 dark:disabled:text-gray-600 disabled:cursor-not-allowed transition-colors whitespace-nowrap">
