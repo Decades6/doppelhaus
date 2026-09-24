@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-server';
 import { Termin } from '@/lib/types';
-import { ANSCHLUSS_NAMEN, istAnschluss, type AnschlussSchluessel } from '@/lib/anschluesse';
+import { anschlussPosten } from '@/lib/anschluesse';
 
 function icsEscapen(text: string): string {
   return text.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
@@ -155,13 +155,16 @@ export async function GET(request: NextRequest) {
 
   // Anschlüsse auf dieselbe Form bringen wie die Kostenpositionen
   const anschlussZiele: Zahlungsziel[] = ((anschluesse ?? []) as { schluessel: string; betrag: number | null; zahlungsziel: string }[])
-    .filter(a => istAnschluss(a.schluessel))
-    .map(a => ({
-      id: a.schluessel,
-      bezeichnung: ANSCHLUSS_NAMEN[a.schluessel as AnschlussSchluessel],
-      betrag: a.betrag ?? 0,
-      zahlungsziel: a.zahlungsziel,
-    }));
+    .flatMap(a => {
+      const posten = anschlussPosten(a.schluessel);
+      if (!posten) return [];
+      return [{
+        id: a.schluessel,
+        bezeichnung: posten.name,
+        betrag: a.betrag ?? 0,
+        zahlungsziel: a.zahlungsziel,
+      }];
+    });
 
   const offeneZiele = [...((kostenPos ?? []) as Zahlungsziel[]), ...anschlussZiele].filter(p => {
     const bezahlt = bezahltNachBeschreibung[p.bezeichnung.trim().toLowerCase()] ?? 0;

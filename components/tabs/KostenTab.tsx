@@ -4,14 +4,7 @@ import { Fragment, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { EigenleistungMaterial, Position, Version } from '@/lib/types';
 import { formatEuro, comparePositionNr, parseGermanNumber, formatGermanNumber } from '@/lib/utils';
-import { ANSCHLUSS_NAMEN, ANSCHLUSS_SCHLUESSEL, type AnschlussSchluessel } from '@/lib/anschluesse';
-
-// Anschlüsse bleiben als feste Einzelfelder in kosten_manuell
-type AnschlussKosten = Record<AnschlussSchluessel, number>;
-
-const LEER_ANSCHLUESSE: AnschlussKosten = {
-  stromanschluss: 0, wasseranschluss: 0, sielanschluss: 0, telekomanschluss: 0,
-};
+import { ANSCHLUSS_POSTEN, istAnschluss } from '@/lib/anschluesse';
 
 export const KATEGORIEN = ['grundstueck', 'planung', 'versicherungen', 'nebenkosten', 'baustelle', 'erdarbeiten', 'vermessung', 'aussenanlagen', 'kueche', 'hwr', 'abriss', 'erdarbeiten_abriss', 'notar', 'genehmigungen', 'maschinen', 'sonstiges'] as const;
 export type Kategorie = typeof KATEGORIEN[number];
@@ -100,7 +93,7 @@ export default function KostenTab() {
   const [version, setVersion] = useState<Version | null>(null);
   const [eigenleistungGewerke, setEigenleistungGewerke] = useState<EigenleistungGewerk[]>([]);
   const [materialGewerke, setMaterialGewerke] = useState<MaterialGewerk[]>([]);
-  const [anschluesse, setAnschluesse] = useState<AnschlussKosten>(LEER_ANSCHLUESSE);
+  const [anschluesse, setAnschluesse] = useState<Record<string, number>>({});
   const [anschlussEingaben, setAnschlussEingaben] = useState<Record<string, string>>({});
   const [anschlussZiele, setAnschlussZiele] = useState<Record<string, string>>({});
   const [kostenPositionen, setKostenPositionen] = useState<Record<string, KostenPosition[]>>({});
@@ -173,17 +166,17 @@ export default function KostenTab() {
     ]);
 
     if (anschlussRows) {
-      const geladen: Partial<AnschlussKosten> = {};
+      const geladen: Record<string, number> = {};
       const eingaben: Record<string, string> = {};
       const ziele: Record<string, string> = {};
       for (const row of anschlussRows) {
-        if (row.schluessel in LEER_ANSCHLUESSE) {
-          (geladen as Record<string, number>)[row.schluessel] = row.betrag ?? 0;
+        if (istAnschluss(row.schluessel)) {
+          geladen[row.schluessel] = row.betrag ?? 0;
           eingaben[row.schluessel] = row.betrag ? formatGermanNumber(row.betrag) : '';
           ziele[row.schluessel] = row.zahlungsziel ?? '';
         }
       }
-      setAnschluesse({ ...LEER_ANSCHLUESSE, ...geladen });
+      setAnschluesse(geladen);
       setAnschlussEingaben(eingaben);
       setAnschlussZiele(ziele);
     }
@@ -214,7 +207,7 @@ export default function KostenTab() {
 
   /** Schreibt Betrag und Zahlungsziel immer gemeinsam — beim Upsert würde ein
    *  einzeln gesendetes Feld das jeweils andere sonst auf null zurücksetzen. */
-  async function anschlussSpeichern(schluessel: AnschlussSchluessel, betrag: number, zahlungsziel: string) {
+  async function anschlussSpeichern(schluessel: string, betrag: number, zahlungsziel: string) {
     setSpeichern(true);
     const { data: { user } } = await supabase.auth.getUser();
     await supabase.from('kosten_manuell').upsert(
@@ -224,7 +217,7 @@ export default function KostenTab() {
     setSpeichern(false);
   }
 
-  function anschlussGeaendert(schluessel: AnschlussSchluessel, rohwert: string) {
+  function anschlussGeaendert(schluessel: string, rohwert: string) {
     setAnschlussEingaben(prev => ({ ...prev, [schluessel]: rohwert }));
     const betrag = parseGermanNumber(rohwert) ?? 0;
     setAnschluesse(prev => ({ ...prev, [schluessel]: betrag }));
@@ -236,7 +229,7 @@ export default function KostenTab() {
   }
 
   /** Datum kommt aus einem Datepicker — diskreter Wert, daher ohne Verzögerung speichern. */
-  function anschlussZielGeaendert(schluessel: AnschlussSchluessel, datum: string) {
+  function anschlussZielGeaendert(schluessel: string, datum: string) {
     setAnschlussZiele(prev => ({ ...prev, [schluessel]: datum }));
     anschlussSpeichern(schluessel, anschluesse[schluessel] ?? 0, datum);
   }
@@ -800,30 +793,33 @@ export default function KostenTab() {
                 ) : <span className="text-gray-300 dark:text-gray-600">—</span>}
               </td>
             </tr>
-            {ANSCHLUSS_SCHLUESSEL.map(key => (
-              <tr key={key}>
-                <td className="px-6 py-2 pl-14 text-xs text-gray-500 dark:text-gray-400">
-                  {ANSCHLUSS_NAMEN[key]}
-                  {anschlussZiele[key] && (
-                    <Zahlungsziel datum={anschlussZiele[key]}
-                      bezahlt={bezahltNachBeschreibung[ANSCHLUSS_NAMEN[key].toLowerCase()] ?? 0}
-                      gesamt={anschluesse[key]} />
-                  )}
-                </td>
-                <td className="px-6 py-2 text-right">
-                  <div className="flex items-center justify-end gap-1">
-                    <input type="date" value={anschlussZiele[key] ?? ''} onChange={e => anschlussZielGeaendert(key, e.target.value)}
-                      title="Zahlungsziel"
-                      className="w-36 text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1.5 mr-2 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 print:hidden" />
-                    <Ampel bezahlt={bezahltNachBeschreibung[ANSCHLUSS_NAMEN[key].toLowerCase()] ?? 0} gesamt={anschluesse[key]} />
-                    <input type="text" value={anschlussEingaben[key] ?? ''} onChange={e => anschlussGeaendert(key, e.target.value)}
-                      placeholder="0,00"
-                      className="w-36 text-right text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100 print:border-0 print:bg-transparent" />
-                    <span className="text-gray-400 text-xs print:hidden">€</span>
-                  </div>
-                </td>
-              </tr>
-            ))}
+            {ANSCHLUSS_POSTEN.map(posten => {
+              const key = posten.schluessel;
+              const bezahlt = bezahltNachBeschreibung[posten.name.toLowerCase()] ?? 0;
+              const betrag = anschluesse[key] ?? 0;
+              return (
+                <tr key={key} className={posten.istGebuehr ? 'print-kein-trennstrich' : ''}>
+                  <td className={`px-6 py-2 text-xs text-gray-500 dark:text-gray-400 ${posten.istGebuehr ? 'pl-20' : 'pl-14'}`}>
+                    <span className={posten.istGebuehr ? 'text-gray-400 dark:text-gray-500' : ''}>{posten.anzeige}</span>
+                    {anschlussZiele[key] && (
+                      <Zahlungsziel datum={anschlussZiele[key]} bezahlt={bezahlt} gesamt={betrag} />
+                    )}
+                  </td>
+                  <td className="px-6 py-2 text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <input type="date" value={anschlussZiele[key] ?? ''} onChange={e => anschlussZielGeaendert(key, e.target.value)}
+                        title="Zahlungsziel"
+                        className="w-36 text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1.5 mr-2 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 print:hidden" />
+                      <Ampel bezahlt={bezahlt} gesamt={betrag} />
+                      <input type="text" value={anschlussEingaben[key] ?? ''} onChange={e => anschlussGeaendert(key, e.target.value)}
+                        placeholder="0,00"
+                        className="w-36 text-right text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100 print:border-0 print:bg-transparent" />
+                      <span className="text-gray-400 text-xs print:hidden">€</span>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
 
             {renderKategorie('baustelle')}
             {renderKategorie('erdarbeiten')}
