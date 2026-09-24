@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { formatEuro } from '@/lib/utils';
 import { KATEGORIEN_NAMEN } from '@/components/tabs/KostenTab';
+import { istAnschluss } from '@/lib/anschluesse';
 
 interface KostenKategorie {
   name: string;
@@ -74,9 +75,8 @@ export default function UebersichtTab({ onTabWechsel }: { onTabWechsel: (tab: Ta
       supabase.from('zahlungen').select('betrag'),
     ]);
 
-    const ANSCHLUSS_SCHLUESSEL = new Set(['stromanschluss', 'wasseranschluss', 'sielanschluss', 'telekomanschluss']);
     const anschluesseGesamt = (anschlussRows ?? [])
-      .filter(r => ANSCHLUSS_SCHLUESSEL.has(r.schluessel))
+      .filter(r => istAnschluss(r.schluessel))
       .reduce((s, r) => s + (r.betrag ?? 0), 0);
 
     const kostenNachKategorie: Record<string, number> = {};

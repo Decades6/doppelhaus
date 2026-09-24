@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-server';
 import { Termin } from '@/lib/types';
+import { ANSCHLUSS_NAMEN, istAnschluss, type AnschlussSchluessel } from '@/lib/anschluesse';
 
 function icsEscapen(text: string): string {
   return text.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
@@ -126,10 +127,16 @@ export async function GET(request: NextRequest) {
 
   // Zahlungsziele gehören nur dem Besitzer des Tokens — Kostenpositionen sind
   // pro Konto privat und dürfen nicht im gemeinsamen Kalender aller landen.
-  const [{ data: kostenPos }, { data: zahlungen }] = await Promise.all([
+  const [{ data: kostenPos }, { data: anschluesse }, { data: zahlungen }] = await Promise.all([
     supabaseAdmin
       .from('kosten_positionen')
       .select('id, bezeichnung, betrag, zahlungsziel')
+      .eq('user_id', tokenRow.user_id)
+      .not('zahlungsziel', 'is', null),
+    // Anschlüsse liegen als feste Schlüssel in kosten_manuell, nicht als Kostenposition
+    supabaseAdmin
+      .from('kosten_manuell')
+      .select('schluessel, betrag, zahlungsziel')
       .eq('user_id', tokenRow.user_id)
       .not('zahlungsziel', 'is', null),
     supabaseAdmin
@@ -146,7 +153,17 @@ export async function GET(request: NextRequest) {
     bezahltNachBeschreibung[schluessel] = (bezahltNachBeschreibung[schluessel] ?? 0) + z.betrag;
   }
 
-  const offeneZiele = ((kostenPos ?? []) as Zahlungsziel[]).filter(p => {
+  // Anschlüsse auf dieselbe Form bringen wie die Kostenpositionen
+  const anschlussZiele: Zahlungsziel[] = ((anschluesse ?? []) as { schluessel: string; betrag: number | null; zahlungsziel: string }[])
+    .filter(a => istAnschluss(a.schluessel))
+    .map(a => ({
+      id: a.schluessel,
+      bezeichnung: ANSCHLUSS_NAMEN[a.schluessel as AnschlussSchluessel],
+      betrag: a.betrag ?? 0,
+      zahlungsziel: a.zahlungsziel,
+    }));
+
+  const offeneZiele = [...((kostenPos ?? []) as Zahlungsziel[]), ...anschlussZiele].filter(p => {
     const bezahlt = bezahltNachBeschreibung[p.bezeichnung.trim().toLowerCase()] ?? 0;
     return bezahlt < p.betrag;
   });

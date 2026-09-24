@@ -4,24 +4,13 @@ import { Fragment, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { EigenleistungMaterial, Position, Version } from '@/lib/types';
 import { formatEuro, comparePositionNr, parseGermanNumber, formatGermanNumber } from '@/lib/utils';
+import { ANSCHLUSS_NAMEN, ANSCHLUSS_SCHLUESSEL, type AnschlussSchluessel } from '@/lib/anschluesse';
 
 // Anschlüsse bleiben als feste Einzelfelder in kosten_manuell
-interface AnschlussKosten {
-  stromanschluss: number;
-  wasseranschluss: number;
-  sielanschluss: number;
-  telekomanschluss: number;
-}
+type AnschlussKosten = Record<AnschlussSchluessel, number>;
 
 const LEER_ANSCHLUESSE: AnschlussKosten = {
   stromanschluss: 0, wasseranschluss: 0, sielanschluss: 0, telekomanschluss: 0,
-};
-
-const ANSCHLUSS_NAMEN: Record<keyof AnschlussKosten, string> = {
-  stromanschluss: 'Stromanschluss',
-  wasseranschluss: 'Wasseranschluss',
-  sielanschluss: 'Sielanschluss',
-  telekomanschluss: 'Telekomanschluss',
 };
 
 export const KATEGORIEN = ['grundstueck', 'planung', 'versicherungen', 'nebenkosten', 'baustelle', 'erdarbeiten', 'vermessung', 'aussenanlagen', 'kueche', 'hwr', 'abriss', 'erdarbeiten_abriss', 'notar', 'genehmigungen', 'maschinen', 'sonstiges'] as const;
@@ -113,6 +102,7 @@ export default function KostenTab() {
   const [materialGewerke, setMaterialGewerke] = useState<MaterialGewerk[]>([]);
   const [anschluesse, setAnschluesse] = useState<AnschlussKosten>(LEER_ANSCHLUESSE);
   const [anschlussEingaben, setAnschlussEingaben] = useState<Record<string, string>>({});
+  const [anschlussZiele, setAnschlussZiele] = useState<Record<string, string>>({});
   const [kostenPositionen, setKostenPositionen] = useState<Record<string, KostenPosition[]>>({});
   const [neuForm, setNeuForm] = useState<Record<string, { bezeichnung: string; betrag: string; menge: string; einzelpreis: string; unterkategorie: string; zahlungsziel: string }>>({});
   const [materialDetails, setMaterialDetails] = useState<Record<string, EigenleistungMaterial[]>>({});
@@ -177,7 +167,7 @@ export default function KostenTab() {
     }
 
     const [{ data: anschlussRows }, { data: positionen }, { data: z }] = await Promise.all([
-      supabase.from('kosten_manuell').select('schluessel, betrag'),
+      supabase.from('kosten_manuell').select('schluessel, betrag, zahlungsziel'),
       supabase.from('kosten_positionen').select('id, kategorie, bezeichnung, betrag, menge, unterkategorie, zahlungsziel').order('created_at', { ascending: true }),
       supabase.from('zahlungen').select('beschreibung, kategorie, betrag'),
     ]);
@@ -185,14 +175,17 @@ export default function KostenTab() {
     if (anschlussRows) {
       const geladen: Partial<AnschlussKosten> = {};
       const eingaben: Record<string, string> = {};
+      const ziele: Record<string, string> = {};
       for (const row of anschlussRows) {
         if (row.schluessel in LEER_ANSCHLUESSE) {
           (geladen as Record<string, number>)[row.schluessel] = row.betrag ?? 0;
           eingaben[row.schluessel] = row.betrag ? formatGermanNumber(row.betrag) : '';
+          ziele[row.schluessel] = row.zahlungsziel ?? '';
         }
       }
       setAnschluesse({ ...LEER_ANSCHLUESSE, ...geladen });
       setAnschlussEingaben(eingaben);
+      setAnschlussZiele(ziele);
     }
 
     if (positionen) {
@@ -219,18 +212,33 @@ export default function KostenTab() {
     setLaden(false);
   }
 
-  async function anschlussGeaendert(schluessel: keyof AnschlussKosten, rohwert: string) {
+  /** Schreibt Betrag und Zahlungsziel immer gemeinsam — beim Upsert würde ein
+   *  einzeln gesendetes Feld das jeweils andere sonst auf null zurücksetzen. */
+  async function anschlussSpeichern(schluessel: AnschlussSchluessel, betrag: number, zahlungsziel: string) {
+    setSpeichern(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    await supabase.from('kosten_manuell').upsert(
+      { user_id: user?.id, schluessel, betrag, zahlungsziel: zahlungsziel.trim() || null },
+      { onConflict: 'user_id,schluessel' },
+    );
+    setSpeichern(false);
+  }
+
+  function anschlussGeaendert(schluessel: AnschlussSchluessel, rohwert: string) {
     setAnschlussEingaben(prev => ({ ...prev, [schluessel]: rohwert }));
     const betrag = parseGermanNumber(rohwert) ?? 0;
     setAnschluesse(prev => ({ ...prev, [schluessel]: betrag }));
 
     if (speicherTimeout.current) clearTimeout(speicherTimeout.current);
-    speicherTimeout.current = setTimeout(async () => {
-      setSpeichern(true);
-      const { data: { user } } = await supabase.auth.getUser();
-      await supabase.from('kosten_manuell').upsert({ user_id: user?.id, schluessel, betrag }, { onConflict: 'user_id,schluessel' });
-      setSpeichern(false);
+    speicherTimeout.current = setTimeout(() => {
+      anschlussSpeichern(schluessel, betrag, anschlussZiele[schluessel] ?? '');
     }, 800);
+  }
+
+  /** Datum kommt aus einem Datepicker — diskreter Wert, daher ohne Verzögerung speichern. */
+  function anschlussZielGeaendert(schluessel: AnschlussSchluessel, datum: string) {
+    setAnschlussZiele(prev => ({ ...prev, [schluessel]: datum }));
+    anschlussSpeichern(schluessel, anschluesse[schluessel] ?? 0, datum);
   }
 
   function bearbeitungStarten(pos: KostenPosition) {
@@ -792,11 +800,21 @@ export default function KostenTab() {
                 ) : <span className="text-gray-300 dark:text-gray-600">—</span>}
               </td>
             </tr>
-            {(Object.keys(ANSCHLUSS_NAMEN) as (keyof AnschlussKosten)[]).map(key => (
+            {ANSCHLUSS_SCHLUESSEL.map(key => (
               <tr key={key}>
-                <td className="px-6 py-2 pl-14 text-xs text-gray-500 dark:text-gray-400">{ANSCHLUSS_NAMEN[key]}</td>
+                <td className="px-6 py-2 pl-14 text-xs text-gray-500 dark:text-gray-400">
+                  {ANSCHLUSS_NAMEN[key]}
+                  {anschlussZiele[key] && (
+                    <Zahlungsziel datum={anschlussZiele[key]}
+                      bezahlt={bezahltNachBeschreibung[ANSCHLUSS_NAMEN[key].toLowerCase()] ?? 0}
+                      gesamt={anschluesse[key]} />
+                  )}
+                </td>
                 <td className="px-6 py-2 text-right">
                   <div className="flex items-center justify-end gap-1">
+                    <input type="date" value={anschlussZiele[key] ?? ''} onChange={e => anschlussZielGeaendert(key, e.target.value)}
+                      title="Zahlungsziel"
+                      className="w-36 text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1.5 mr-2 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 print:hidden" />
                     <Ampel bezahlt={bezahltNachBeschreibung[ANSCHLUSS_NAMEN[key].toLowerCase()] ?? 0} gesamt={anschluesse[key]} />
                     <input type="text" value={anschlussEingaben[key] ?? ''} onChange={e => anschlussGeaendert(key, e.target.value)}
                       placeholder="0,00"
