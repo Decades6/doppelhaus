@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { Zahlung } from '@/lib/types';
 import { formatEuro, parseGermanNumber, formatGermanNumber } from '@/lib/utils';
 import { KATEGORIEN_NAMEN } from '@/components/tabs/KostenTab';
+import { ANSCHLUSS_POSTEN } from '@/lib/anschluesse';
 
 // Kategorien, die es nur bei Zahlungen gibt (keine Kostenpositionen-Kategorie).
 // "Anschlüsse" wird im Kosten-Tab über genau diesen Namen zugeordnet.
@@ -14,8 +15,13 @@ const ZUSATZ_KATEGORIEN = ['Bauträger', 'Material', 'Eigenleistung', 'Anschlüs
 // findet die Ampel im Kosten-Tab die zugehörigen Zahlungen.
 const KATEGORIEN = [...ZUSATZ_KATEGORIEN, ...Object.values(KATEGORIEN_NAMEN)];
 
+// Die Anschlüsse liegen in kosten_manuell statt in kosten_positionen. Für die
+// Schnellauswahl bekommen sie diese Pseudo-Kategorie, damit sie gruppiert erscheinen.
+const ANSCHLUSS_KATEGORIE = '__anschluesse';
+
 /** Kostenpositions-Kategorie (z.B. "kueche") → Zahlungs-Kategoriename (z.B. "Küche") */
 function kostenZuZahlung(kategorie: string): string {
+  if (kategorie === ANSCHLUSS_KATEGORIE) return 'Anschlüsse';
   return KATEGORIEN_NAMEN[kategorie as keyof typeof KATEGORIEN_NAMEN] ?? 'Sonstiges';
 }
 
@@ -44,13 +50,29 @@ export default function ZahlungenTab() {
   useEffect(() => { ladeZahlungen(); }, []);
 
   async function ladeZahlungen() {
-    const [{ data: z }, { data: v }, { data: em }] = await Promise.all([
+    const [{ data: z }, { data: v }, { data: em }, { data: km }] = await Promise.all([
       supabase.from('zahlungen').select('*').order('datum', { ascending: false }),
       supabase.from('kosten_positionen').select('id, kategorie, bezeichnung, betrag').order('kategorie').order('bezeichnung'),
       supabase.from('eigenleistung_materialien').select('id, gewerk, bezeichnung, gesamtpreis').order('gewerk').order('bezeichnung'),
+      supabase.from('kosten_manuell').select('schluessel, betrag'),
     ]);
     if (z) setZahlungen(z as Zahlung[]);
-    if (v) setKostenVorlagen(v as KostenVorlage[]);
+
+    // Anschlüsse in Vorlagen-Form bringen. Als Bezeichnung dient der eindeutige Name
+    // ("Verwaltungsgebühr Sielanschluss") — darüber ordnet die Ampel im Kosten-Tab zu.
+    const betragNachSchluessel = new Map(
+      ((km ?? []) as { schluessel: string; betrag: number | null }[]).map(r => [r.schluessel, r.betrag ?? 0]),
+    );
+    const anschlussVorlagen: KostenVorlage[] = ANSCHLUSS_POSTEN
+      .filter(p => (betragNachSchluessel.get(p.schluessel) ?? 0) > 0)
+      .map(p => ({
+        id: p.schluessel,
+        kategorie: ANSCHLUSS_KATEGORIE,
+        bezeichnung: p.name,
+        betrag: betragNachSchluessel.get(p.schluessel) ?? 0,
+      }));
+
+    setKostenVorlagen([...((v ?? []) as KostenVorlage[]), ...anschlussVorlagen]);
     if (em) setEigenleistungVorlagen(em as EigenleistungVorlage[]);
     setLaden(false);
   }
