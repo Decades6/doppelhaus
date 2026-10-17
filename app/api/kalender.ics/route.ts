@@ -51,6 +51,34 @@ function zahlungszieleZuVevents(ziele: Zahlungsziel[], jetzt: string): string[] 
   });
 }
 
+interface AboVorgang {
+  id: string;
+  gewerk: string;
+  vorgang: string;
+  anfang: string;
+  ende: string;
+  dauer_tage: number;
+}
+
+/** Ganztägige Einträge über die Dauer der Bauzeitenplan-Vorgänge, die der Token-Besitzer ausgewählt hat. */
+function bauvorgaengeZuVevents(vorgaenge: AboVorgang[], jetzt: string): string[] {
+  return vorgaenge.map(v => {
+    const tage = Number(v.dauer_tage);
+    const dauer = tage.toLocaleString('de-DE', { maximumFractionDigits: 1 });
+    return [
+      'BEGIN:VEVENT',
+      `UID:bauzeitenplan-${v.id}@doppelhaus`,
+      `DTSTAMP:${jetzt}`,
+      `DTSTART;VALUE=DATE:${v.anfang.replace(/-/g, '')}`,
+      `DTEND;VALUE=DATE:${naechsterTagIcs(v.ende)}`,
+      `SUMMARY:${icsEscapen(`Bau: ${v.vorgang}`)}`,
+      `DESCRIPTION:${icsEscapen(`Gewerk: ${v.gewerk}\nDauer laut Bauzeitenplan: ${dauer} ${tage === 1 ? 'Arbeitstag' : 'Arbeitstage'}`)}`,
+      'TRANSP:TRANSPARENT',
+      'END:VEVENT',
+    ].join('\r\n');
+  });
+}
+
 function termineZuIcs(termine: Termin[], kalenderName: string, zusatzEvents: string[] = []): string {
   const events = termine.map(t => {
     const uid = `${t.id}@doppelhaus`;
@@ -127,7 +155,7 @@ export async function GET(request: NextRequest) {
 
   // Zahlungsziele gehören nur dem Besitzer des Tokens — Kostenpositionen sind
   // pro Konto privat und dürfen nicht im gemeinsamen Kalender aller landen.
-  const [{ data: kostenPos }, { data: anschluesse }, { data: zahlungen }] = await Promise.all([
+  const [{ data: kostenPos }, { data: anschluesse }, { data: zahlungen }, { data: aboAuswahl }] = await Promise.all([
     supabaseAdmin
       .from('kosten_positionen')
       .select('id, bezeichnung, betrag, zahlungsziel')
@@ -142,6 +170,11 @@ export async function GET(request: NextRequest) {
     supabaseAdmin
       .from('zahlungen')
       .select('beschreibung, betrag')
+      .eq('user_id', tokenRow.user_id),
+    // Der Bauzeitenplan ist gemeinsam, welche Vorgänge ins Abo kommen entscheidet jedes Konto selbst
+    supabaseAdmin
+      .from('bauzeitenplan_kalender')
+      .select('bauzeitenplan(id, gewerk, vorgang, anfang, ende, dauer_tage)')
       .eq('user_id', tokenRow.user_id),
   ]);
 
@@ -175,7 +208,14 @@ export async function GET(request: NextRequest) {
   const ics = termineZuIcs(
     (termine ?? []) as Termin[],
     'Doppelhaus Baukalender',
-    zahlungszieleZuVevents(offeneZiele, jetzt),
+    [
+      ...zahlungszieleZuVevents(offeneZiele, jetzt),
+      ...bauvorgaengeZuVevents(
+        ((aboAuswahl ?? []) as unknown as { bauzeitenplan: AboVorgang | null }[])
+          .flatMap(a => (a.bauzeitenplan ? [a.bauzeitenplan] : [])),
+        jetzt,
+      ),
+    ],
   );
 
   return new NextResponse(ics, {

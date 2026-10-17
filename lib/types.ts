@@ -48,6 +48,20 @@ export interface Termin {
   created_at: string;
 }
 
+/** Ein Vorgang im Bauzeitenplan — gemeinsam für beide Familien */
+export interface Bauvorgang {
+  id: string;
+  nr: number;
+  gewerk: string;
+  vorgang: string;
+  anfang: string;
+  ende: string;
+  /** Dauer in Arbeitstagen, wie im Plan des Bauträgers (auch 0,5 möglich) */
+  dauer_tage: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Zahlung {
   id: string;
   user_id: string;

@@ -6,6 +6,7 @@ import AngebotTab from '@/components/tabs/AngebotTab';
 import EigenleistungenTab from '@/components/tabs/EigenleistungenTab';
 import KostenTab from '@/components/tabs/KostenTab';
 import ZahlungenTab from '@/components/tabs/ZahlungenTab';
+import BauzeitenplanTab from '@/components/tabs/BauzeitenplanTab';
 import KalenderTab from '@/components/tabs/KalenderTab';
 
 const TABS = [
@@ -14,6 +15,7 @@ const TABS = [
   { id: 'eigenleistungen', label: 'Eigenleistungen' },
   { id: 'kosten',          label: 'Kosten' },
   { id: 'zahlungen',       label: 'Zahlungen' },
+  { id: 'bauzeitenplan',   label: 'Bauzeitenplan' },
   { id: 'kalender',        label: 'Termine' },
 ] as const;
 
@@ -47,6 +49,7 @@ export default function Dashboard() {
       {aktuellerTab === 'eigenleistungen' && <EigenleistungenTab />}
       {aktuellerTab === 'kosten'          && <KostenTab />}
       {aktuellerTab === 'zahlungen'       && <ZahlungenTab />}
+      {aktuellerTab === 'bauzeitenplan'   && <BauzeitenplanTab />}
       {aktuellerTab === 'kalender'        && <KalenderTab />}
     </div>
   );
