@@ -87,6 +87,15 @@ export default function BauzeitenplanTab() {
     ladeDaten();
   }, []);
 
+  // Pop-up mit Escape schließen
+  const formularOffen = formular !== null;
+  useEffect(() => {
+    if (!formularOffen) return;
+    const beiTaste = (e: KeyboardEvent) => { if (e.key === 'Escape') setFormular(null); };
+    window.addEventListener('keydown', beiTaste);
+    return () => window.removeEventListener('keydown', beiTaste);
+  }, [formularOffen]);
+
   const heute = heuteIso();
 
   // Gewerke in der Reihenfolge des Plans, Vorgänge darin nach Nummer
@@ -176,12 +185,14 @@ export default function BauzeitenplanTab() {
   function bearbeiten(v: Bauvorgang) {
     setFormular({ id: v.id, gewerk: v.gewerk, vorgang: v.vorgang, anfang: v.anfang, ende: v.ende, dauer: String(v.dauer_tage).replace('.', ',') });
     setLoeschenFragen(false);
+    setFehler(null);
   }
 
   function neuerVorgang() {
     const tag = naechster?.anfang ?? heute;
     setFormular({ id: null, gewerk: '', vorgang: '', anfang: tag, ende: tag, dauer: String(arbeitstage(tag, tag)) });
     setLoeschenFragen(false);
+    setFehler(null);
   }
 
   /** Bei geänderten Daten die Dauer neu vorschlagen — bleibt danach von Hand änderbar */
@@ -314,57 +325,75 @@ export default function BauzeitenplanTab() {
         </div>
       )}
 
-      {/* Bearbeiten / neu */}
+      {/* Bearbeiten / neu — als Pop-up über dem Plan */}
       {formular && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 mb-6 border border-blue-100 dark:border-blue-900">
-          <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-300 mb-4">{formular.id ? 'Vorgang bearbeiten' : 'Neuen Vorgang eintragen'}</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
-            <div className="lg:col-span-2">
-              <label className="text-xs text-gray-400 mb-1 block">Gewerk *</label>
-              <input list="bauzeitenplan-gewerke" value={formular.gewerk} onChange={e => setFormular(f => f && { ...f, gewerk: e.target.value })}
-                placeholder="z.B. Rohbau" className={EINGABE} />
-              <datalist id="bauzeitenplan-gewerke">
-                {gewerke.map(g => <option key={g} value={g} />)}
-              </datalist>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 print:hidden"
+          onMouseDown={e => { if (e.target === e.currentTarget) setFormular(null); }}>
+          <div role="dialog" aria-modal="true" aria-labelledby="bauzeitenplan-dialog-titel"
+            className="w-full max-w-md max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-5">
+            <div className="flex items-start justify-between gap-4 mb-4">
+              <h3 id="bauzeitenplan-dialog-titel" className="text-base font-semibold text-gray-900 dark:text-white">
+                {formular.id ? 'Vorgang bearbeiten' : 'Neuer Vorgang'}
+              </h3>
+              <button onClick={() => setFormular(null)} aria-label="Schließen"
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xl leading-none -mt-1">×</button>
             </div>
-            <div className="lg:col-span-4">
-              <label className="text-xs text-gray-400 mb-1 block">Vorgang *</label>
-              <input value={formular.vorgang} onChange={e => setFormular(f => f && { ...f, vorgang: e.target.value })}
-                placeholder="z.B. Fundamente EG" className={EINGABE} />
+
+            {fehler && (
+              <div className="mb-4 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 rounded-lg px-3 py-2">{fehler}</div>
+            )}
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2">
+                <label className="text-xs text-gray-400 mb-1 block">Gewerk *</label>
+                <input list="bauzeitenplan-gewerke" value={formular.gewerk} onChange={e => setFormular(f => f && { ...f, gewerk: e.target.value })}
+                  placeholder="z.B. Rohbau" autoFocus={!formular.id} className={EINGABE} />
+                <datalist id="bauzeitenplan-gewerke">
+                  {gewerke.map(g => <option key={g} value={g} />)}
+                </datalist>
+              </div>
+              <div className="col-span-2">
+                <label className="text-xs text-gray-400 mb-1 block">Vorgang *</label>
+                <input value={formular.vorgang} onChange={e => setFormular(f => f && { ...f, vorgang: e.target.value })}
+                  placeholder="z.B. Fundamente EG" className={EINGABE} />
+              </div>
+              <div>
+                <label className="text-xs text-gray-400 mb-1 block">Anfang</label>
+                <input type="date" value={formular.anfang} onChange={e => datumAendern('anfang', e.target.value)} className={EINGABE} />
+              </div>
+              <div>
+                <label className="text-xs text-gray-400 mb-1 block">Ende</label>
+                <input type="date" value={formular.ende} min={formular.anfang} onChange={e => datumAendern('ende', e.target.value)} className={EINGABE} />
+              </div>
+              <div className="col-span-2">
+                <label className="text-xs text-gray-400 mb-1 block">Dauer (Arbeitstage)</label>
+                <input inputMode="decimal" value={formular.dauer} onChange={e => setFormular(f => f && { ...f, dauer: e.target.value })} className={EINGABE} />
+                <p className="text-xs text-gray-400 mt-1">Wird beim Ändern der Daten neu vorgeschlagen (Mo–Fr ohne Feiertage) und kann angepasst werden.</p>
+              </div>
             </div>
-            <div className="lg:col-span-2">
-              <label className="text-xs text-gray-400 mb-1 block">Anfang</label>
-              <input type="date" value={formular.anfang} onChange={e => datumAendern('anfang', e.target.value)} className={EINGABE} />
-            </div>
-            <div className="lg:col-span-2">
-              <label className="text-xs text-gray-400 mb-1 block">Ende</label>
-              <input type="date" value={formular.ende} min={formular.anfang} onChange={e => datumAendern('ende', e.target.value)} className={EINGABE} />
-            </div>
-            <div className="lg:col-span-2">
-              <label className="text-xs text-gray-400 mb-1 block">Dauer (Arbeitstage)</label>
-              <input inputMode="decimal" value={formular.dauer} onChange={e => setFormular(f => f && { ...f, dauer: e.target.value })} className={EINGABE} />
-            </div>
-          </div>
-          <p className="text-xs text-gray-400 mt-2">Die Dauer wird beim Ändern der Daten neu vorgeschlagen (Mo–Fr ohne Feiertage) und kann angepasst werden.</p>
-          <div className="flex gap-2 mt-4 flex-wrap">
-            <button onClick={formularSpeichern} disabled={speichern || !formular.vorgang.trim() || !formular.gewerk.trim()}
-              className="text-sm bg-blue-600 text-white px-5 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
-              {speichern ? 'Speichert...' : 'Speichern'}
-            </button>
-            <button onClick={() => setFormular(null)}
-              className="text-sm text-gray-500 px-5 py-2 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-gray-400 transition-colors">
-              Abbrechen
-            </button>
-            {formular.id && (
-              loeschenFragen ? (
-                <span className="flex items-center gap-2 ml-auto text-sm">
-                  <span className="text-gray-500 dark:text-gray-400">Wirklich löschen? Gilt für beide Familien.</span>
-                  <button onClick={vorgangLoeschen} className="text-white bg-red-500 hover:bg-red-600 px-3 py-2 rounded-lg">Ja, löschen</button>
-                  <button onClick={() => setLoeschenFragen(false)} className="text-gray-500 px-3 py-2">Nein</button>
+
+            {loeschenFragen ? (
+              <div className="mt-5 flex items-center justify-between gap-2 flex-wrap bg-red-50 dark:bg-red-950/40 rounded-lg px-3 py-2 text-sm">
+                <span className="text-red-700 dark:text-red-300">Wirklich löschen? Gilt für beide Familien.</span>
+                <span className="flex gap-2">
+                  <button onClick={() => setLoeschenFragen(false)} className="text-gray-500 dark:text-gray-400 px-3 py-1.5">Nein</button>
+                  <button onClick={vorgangLoeschen} className="text-white bg-red-500 hover:bg-red-600 px-3 py-1.5 rounded-lg">Ja, löschen</button>
                 </span>
-              ) : (
-                <button onClick={() => setLoeschenFragen(true)} className="text-sm text-red-500 hover:text-red-600 px-3 py-2 ml-auto">Löschen</button>
-              )
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 mt-5">
+                {formular.id && (
+                  <button onClick={() => setLoeschenFragen(true)} className="text-sm text-red-500 hover:text-red-600 px-1 py-2 mr-auto">Löschen</button>
+                )}
+                <button onClick={() => setFormular(null)}
+                  className="text-sm text-gray-500 px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-gray-400 transition-colors ml-auto">
+                  Abbrechen
+                </button>
+                <button onClick={formularSpeichern} disabled={speichern || !formular.vorgang.trim() || !formular.gewerk.trim()}
+                  className="text-sm bg-blue-600 text-white px-5 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
+                  {speichern ? 'Speichert...' : 'Speichern'}
+                </button>
+              </div>
             )}
           </div>
         </div>
