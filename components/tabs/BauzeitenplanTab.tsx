@@ -91,14 +91,15 @@ export default function BauzeitenplanTab() {
   const formularOffen = formular !== null;
   useEffect(() => {
     if (!formularOffen) return;
-    const beiTaste = (e: KeyboardEvent) => { if (e.key === 'Escape') setFormular(null); };
+    const beiTaste = (e: KeyboardEvent) => { if (e.key === 'Escape') { setFormular(null); setFehler(null); } };
     window.addEventListener('keydown', beiTaste);
     return () => window.removeEventListener('keydown', beiTaste);
   }, [formularOffen]);
 
   const heute = heuteIso();
 
-  // Gewerke in der Reihenfolge des Plans, Vorgänge darin nach Nummer
+  // Gewerke in der Reihenfolge des Plans, Vorgänge darin nach Datum — neue Vorgänge
+  // bekommen die höchste Nummer und würden sonst immer am Ende ihres Gewerks landen
   const gruppen = useMemo(() => {
     const nachGewerk = new Map<string, Bauvorgang[]>();
     for (const v of [...vorgaenge].sort((a, b) => a.nr - b.nr)) {
@@ -107,7 +108,7 @@ export default function BauzeitenplanTab() {
     }
     return [...nachGewerk.entries()].map(([gewerk, liste]) => ({
       gewerk,
-      liste,
+      liste: [...liste].sort((a, b) => a.anfang.localeCompare(b.anfang) || a.nr - b.nr),
       anfang: liste.reduce((m, v) => (v.anfang < m ? v.anfang : m), liste[0].anfang),
       ende: liste.reduce((m, v) => (v.ende > m ? v.ende : m), liste[0].ende),
     }));
@@ -163,7 +164,7 @@ export default function BauzeitenplanTab() {
     });
     const { data: { user } } = await supabase.auth.getUser();
     const { error } = an
-      ? await supabase.from('bauzeitenplan_kalender').insert(betroffen.map(vorgang_id => ({ user_id: user?.id, vorgang_id })))
+      ? await supabase.from('bauzeitenplan_kalender').upsert(betroffen.map(vorgang_id => ({ user_id: user?.id, vorgang_id })), { onConflict: 'user_id,vorgang_id', ignoreDuplicates: true })
       : await supabase.from('bauzeitenplan_kalender').delete().in('vorgang_id', betroffen);
     if (error) {
       setImAbo(vorher);
@@ -181,6 +182,11 @@ export default function BauzeitenplanTab() {
   }
 
   // ---------- Bearbeiten ----------
+
+  function schliessen() {
+    setFormular(null);
+    setFehler(null);
+  }
 
   function bearbeiten(v: Bauvorgang) {
     setFormular({ id: v.id, gewerk: v.gewerk, vorgang: v.vorgang, anfang: v.anfang, ende: v.ende, dauer: String(v.dauer_tage).replace('.', ',') });
@@ -328,14 +334,14 @@ export default function BauzeitenplanTab() {
       {/* Bearbeiten / neu — als Pop-up über dem Plan */}
       {formular && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 print:hidden"
-          onMouseDown={e => { if (e.target === e.currentTarget) setFormular(null); }}>
+          onMouseDown={e => { if (e.target === e.currentTarget) schliessen(); }}>
           <div role="dialog" aria-modal="true" aria-labelledby="bauzeitenplan-dialog-titel"
             className="w-full max-w-md max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-5">
             <div className="flex items-start justify-between gap-4 mb-4">
               <h3 id="bauzeitenplan-dialog-titel" className="text-base font-semibold text-gray-900 dark:text-white">
                 {formular.id ? 'Vorgang bearbeiten' : 'Neuer Vorgang'}
               </h3>
-              <button onClick={() => setFormular(null)} aria-label="Schließen"
+              <button onClick={schliessen} aria-label="Schließen"
                 className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xl leading-none -mt-1">×</button>
             </div>
 
@@ -385,7 +391,7 @@ export default function BauzeitenplanTab() {
                 {formular.id && (
                   <button onClick={() => setLoeschenFragen(true)} className="text-sm text-red-500 hover:text-red-600 px-1 py-2 mr-auto">Löschen</button>
                 )}
-                <button onClick={() => setFormular(null)}
+                <button onClick={schliessen}
                   className="text-sm text-gray-500 px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-gray-400 transition-colors ml-auto">
                   Abbrechen
                 </button>
@@ -440,7 +446,7 @@ export default function BauzeitenplanTab() {
                 return (
                   <div key={g.gewerk} className="border-b border-gray-100 dark:border-gray-700 last:border-b-0">
                     {/* Gewerk-Zeile */}
-                    <div className="flex bg-gray-50 dark:bg-gray-900/40">
+                    <div className="flex bg-gray-50 dark:bg-gray-900">
                       <div className="sticky left-0 z-10 w-44 sm:w-72 shrink-0 bg-gray-50 dark:bg-gray-900 border-r border-gray-100 dark:border-gray-700 flex items-center gap-2 px-4 h-7">
                         <AboSchalter an={schalter.an} teilweise={schalter.teilweise} onClick={schalter.umschalten}
                           titel={schalter.an ? 'Ganzes Gewerk aus dem Kalender-Abo nehmen' : 'Ganzes Gewerk ins Kalender-Abo'} />

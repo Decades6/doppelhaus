@@ -27,12 +27,12 @@ export default function Dashboard() {
   return (
     <div>
       {/* Tab-Navigation */}
-      <div className="flex gap-1 mb-8 bg-gray-100 dark:bg-gray-800 rounded-xl p-1 print:hidden">
+      <div className="flex gap-1 mb-8 bg-gray-100 dark:bg-gray-800 rounded-xl p-1 print:hidden overflow-x-auto">
         {TABS.map(tab => (
           <button
             key={tab.id}
             onClick={() => setAktuellerTab(tab.id)}
-            className={`flex-1 text-sm font-medium py-2.5 px-3 rounded-lg transition-colors ${
+            className={`flex-1 whitespace-nowrap text-sm font-medium py-2.5 px-3 rounded-lg transition-colors ${
               aktuellerTab === tab.id
                 ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
                 : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
