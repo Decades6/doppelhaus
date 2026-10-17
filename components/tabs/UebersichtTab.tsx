@@ -132,7 +132,7 @@ export default function UebersichtTab({ onTabWechsel }: { onTabWechsel: (tab: Ta
   return (
     <div className="space-y-6">
       {/* Hauptkennzahlen */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border-l-4 border-gray-700 dark:border-gray-500">
           <div className="text-sm text-gray-500 dark:text-gray-400 mb-1">Gesamtkosten des Bauprojekts</div>
           <div className="text-2xl font-bold text-gray-900 dark:text-white">{formatEuro(gesamtKosten)}</div>

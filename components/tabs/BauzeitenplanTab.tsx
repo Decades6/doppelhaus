@@ -65,7 +65,9 @@ export default function BauzeitenplanTab() {
   const [vorgaenge, setVorgaenge] = useState<Bauvorgang[]>([]);
   const [imAbo, setImAbo] = useState<Set<string>>(new Set());
   const [laden, setLaden] = useState(true);
-  const [ansicht, setAnsicht] = useState<'balken' | 'liste'>('balken');
+  // Am Handy ist das breite Balkendiagramm schwer lesbar — dort mit der Liste starten
+  const [ansicht, setAnsicht] = useState<'balken' | 'liste'>(() =>
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 639px)').matches ? 'liste' : 'balken');
   const [formular, setFormular] = useState<Formular | null>(null);
   const [loeschenFragen, setLoeschenFragen] = useState(false);
   const [speichern, setSpeichern] = useState(false);

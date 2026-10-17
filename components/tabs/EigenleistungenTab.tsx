@@ -236,7 +236,7 @@ export default function EigenleistungenTab() {
         <h2 className="text-xl font-bold text-gray-900 dark:text-white">Eigenleistungs-Planer</h2>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 border-l-4 border-green-500">
           <div className="text-sm text-gray-500 dark:text-gray-400 mb-1">Ersparnis vom Bauträger</div>
           <div className="text-2xl font-bold text-green-600 dark:text-green-400">{formatEuro(gesamtErsparnis)}</div>
@@ -274,7 +274,7 @@ export default function EigenleistungenTab() {
           <div className="mb-4 bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden">
             <button
               onClick={() => setOffeneGewerke(prev => { const next = new Set(prev); isOffen ? next.delete('__frei__') : next.add('__frei__'); return next; })}
-              className="w-full bg-gray-50 dark:bg-gray-700 px-6 py-4 flex items-center justify-between hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors text-left"
+              className="w-full bg-gray-50 dark:bg-gray-700 px-4 sm:px-6 py-4 flex items-center justify-between gap-x-4 gap-y-2 flex-wrap hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors text-left"
             >
               <div className="flex items-center gap-3">
                 <span className="text-gray-400">{isOffen ? '▼' : '▶'}</span>
@@ -287,10 +287,10 @@ export default function EigenleistungenTab() {
             </button>
 
             {isOffen && (
-              <div className="p-6 space-y-4">
+              <div className="p-4 sm:p-6 space-y-4">
                 {freiEigenleistungen.length > 0 && (
-                  <div className="rounded-lg overflow-hidden border border-gray-100 dark:border-gray-600">
-                    <table className="w-full text-sm">
+                  <div className="rounded-lg overflow-x-auto border border-gray-100 dark:border-gray-600">
+                    <table className="w-full min-w-[32rem] text-sm">
                       <thead>
                         <tr className="bg-gray-50 dark:bg-gray-700 text-xs text-gray-500 dark:text-gray-400">
                           <th className="px-4 py-2 text-left font-medium">Bezeichnung</th>
@@ -431,14 +431,14 @@ export default function EigenleistungenTab() {
             <div key={gewerk} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden">
               <button
                 onClick={() => setOffeneGewerke(prev => { const next = new Set(prev); isOffen ? next.delete(gewerk) : next.add(gewerk); return next; })}
-                className="w-full bg-gray-50 dark:bg-gray-700 px-6 py-4 flex items-center justify-between hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors text-left"
+                className="w-full bg-gray-50 dark:bg-gray-700 px-4 sm:px-6 py-4 flex items-center justify-between gap-x-4 gap-y-2 flex-wrap hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors text-left"
               >
                 <div className="flex items-center gap-3">
                   <span className="text-gray-400">{isOffen ? '▼' : '▶'}</span>
                   <h3 className="font-semibold text-gray-800 dark:text-white">{gewerk}</h3>
                   <span className="text-xs text-gray-400 bg-gray-200 dark:bg-gray-600 px-2 py-0.5 rounded-full">{gwPos.length} Pos.</span>
                 </div>
-                <div className="flex items-center gap-6 text-sm">
+                <div className="flex items-center gap-x-4 gap-y-1 flex-wrap text-sm ml-auto">
                   <span className="text-gray-400 dark:text-gray-500">Bauträger: <span className="font-medium text-gray-700 dark:text-gray-200">{formatEuro(gwErsparnis)}</span></span>
                   {gwMaterialkosten > 0 && <span className="text-orange-500">Material: {formatEuro(gwMaterialkosten)}</span>}
                   <span className={`font-bold ${gwNetto >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-500'}`}>Netto: {gwNetto >= 0 ? '+' : ''}{formatEuro(gwNetto)}</span>
@@ -472,11 +472,11 @@ export default function EigenleistungenTab() {
               </button>
 
               {isOffen && (
-                <div className="p-6 space-y-6">
+                <div className="p-4 sm:p-6 space-y-6">
                   <div>
                     <h4 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-2">Positionen vom Bauträger (Eigenleistung)</h4>
-                    <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg overflow-hidden">
-                      <table className="w-full text-sm">
+                    <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg overflow-x-auto">
+                      <table className="w-full min-w-[32rem] text-sm">
                         <tbody className="divide-y divide-gray-100 dark:divide-gray-600">
                           {gwPos.map(p => (
                             <tr key={p.id} className={p.nicht_im_angebot ? 'bg-orange-50 dark:bg-orange-900/20' : ''}>
@@ -505,8 +505,8 @@ export default function EigenleistungenTab() {
                   <div>
                     <h4 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-2">Meine Materialliste</h4>
                     {gwMat.length > 0 && (
-                      <div className="mb-3 rounded-lg overflow-hidden border border-gray-100 dark:border-gray-600">
-                        <table className="w-full text-sm">
+                      <div className="mb-3 rounded-lg overflow-x-auto border border-gray-100 dark:border-gray-600">
+                        <table className="w-full min-w-[32rem] text-sm">
                           <thead>
                             <tr className="bg-gray-50 dark:bg-gray-700 text-xs text-gray-500 dark:text-gray-400">
                               <th className="px-4 py-2 text-left font-medium">Bezeichnung</th>

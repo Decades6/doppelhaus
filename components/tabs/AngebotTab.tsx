@@ -308,13 +308,13 @@ ${zeilen}
   return (
     <div>
       {/* Versions-Info */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3 text-sm">
+      <div className="flex items-center justify-between gap-3 flex-wrap mb-6">
+        <div className="flex items-center gap-x-3 gap-y-1 flex-wrap text-sm">
           <span className="text-gray-500 dark:text-gray-300">Aktuelle Version:</span>
           <span className="font-medium text-gray-800 dark:text-gray-100">{aktuelleVersion.name}</span>
           <span className="text-gray-400 dark:text-gray-400">({formatDatum(aktuelleVersion.erstellt_am)})</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {!editModus ? (
             <>
               <button
@@ -371,32 +371,32 @@ ${zeilen}
       <VersionenVerwalten versionen={alleVersionen} onGeloescht={loadDaten} />
 
       {/* Preis-Übersicht */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-4 mb-8">
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border-l-4 border-blue-500">
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4 mb-8">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-4 sm:p-6 border-l-4 border-blue-500">
           <div className="text-sm text-gray-500 dark:text-gray-400 mb-1">Gesamtangebot</div>
-          <div className="text-2xl font-bold text-gray-900 dark:text-white">{formatEuro(gesamtsumme)}</div>
+          <div className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-white">{formatEuro(gesamtsumme)}</div>
           <div className="text-xs text-gray-400 mt-1">{realePositionen.length} Positionen</div>
         </div>
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border-l-4 border-green-500">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-4 sm:p-6 border-l-4 border-green-500">
           <div className="text-sm text-gray-500 dark:text-gray-400 mb-1">Ersparnis durch Eigenleistung</div>
-          <div className="text-2xl font-bold text-green-600 dark:text-green-400">{formatEuro(eigenleistungSumme)}</div>
+          <div className="text-lg sm:text-2xl font-bold text-green-600 dark:text-green-400">{formatEuro(eigenleistungSumme)}</div>
           <div className="text-xs text-gray-400 mt-1">{realePositionen.filter(p => p.eigenleistung).length} Positionen markiert</div>
         </div>
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border-l-4 border-orange-500">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-4 sm:p-6 border-l-4 border-orange-500">
           <div className="text-sm text-gray-500 dark:text-gray-400 mb-1">Verbleibend für Bauträger</div>
-          <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">{formatEuro(verbleibend)}</div>
+          <div className="text-lg sm:text-2xl font-bold text-orange-600 dark:text-orange-400">{formatEuro(verbleibend)}</div>
           <div className="text-xs text-gray-400 mt-1">
             {gesamtsumme > 0 ? Math.round((eigenleistungSumme / gesamtsumme) * 100) : 0}% Eigenleistungsanteil
           </div>
         </div>
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border-l-4 border-gray-400">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-4 sm:p-6 border-l-4 border-gray-400">
           <div className="text-sm text-gray-500 dark:text-gray-400 mb-1">zzgl. 19 % MwSt.</div>
-          <div className="text-2xl font-bold text-gray-700 dark:text-white">{formatEuro(mwst)}</div>
+          <div className="text-lg sm:text-2xl font-bold text-gray-700 dark:text-white">{formatEuro(mwst)}</div>
           <div className="text-xs text-gray-400 mt-1">auf Bauträger-Anteil</div>
         </div>
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border-l-4 border-gray-800 dark:border-gray-500">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-4 sm:p-6 border-l-4 border-gray-800 dark:border-gray-500">
           <div className="text-sm text-gray-500 dark:text-gray-400 mb-1">Brutto gesamt</div>
-          <div className="text-2xl font-bold text-gray-900 dark:text-white">{formatEuro(brutto)}</div>
+          <div className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-white">{formatEuro(brutto)}</div>
           <div className="text-xs text-gray-400 mt-1">inkl. MwSt.</div>
         </div>
       </div>
@@ -438,7 +438,7 @@ ${zeilen}
             <div key={gewerk} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden">
               <button
                 onClick={() => toggleGewerk(gewerk)}
-                className="w-full bg-gray-50 dark:bg-gray-700 px-6 py-4 flex items-center justify-between border-b border-gray-100 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors text-left"
+                className="w-full bg-gray-50 dark:bg-gray-700 px-4 sm:px-6 py-4 flex items-center justify-between gap-x-4 gap-y-2 flex-wrap border-b border-gray-100 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors text-left"
               >
                 <div className="flex items-center gap-3">
                   <span className="text-gray-400 dark:text-gray-300">{isOffen ? '▼' : '▶'}</span>
@@ -446,11 +446,11 @@ ${zeilen}
                     <span className="text-xs font-mono font-medium text-gray-400 dark:text-gray-500 shrink-0">{gwNummer}</span>
                   )}
                   <h3 className="font-semibold text-gray-800 dark:text-white">{gewerk}</h3>
-                  <span className="text-xs text-gray-400 dark:text-gray-300 bg-gray-200 dark:bg-gray-600 px-2 py-0.5 rounded-full">
+                  <span className="hidden sm:inline text-xs text-gray-400 dark:text-gray-300 bg-gray-200 dark:bg-gray-600 px-2 py-0.5 rounded-full">
                     {gwPositionen.length} Pos.
                   </span>
                 </div>
-                <div className="flex items-center gap-4 text-sm">
+                <div className="flex items-center gap-3 sm:gap-4 text-sm ml-auto">
                   {!editModus && relevantePositionen.length > 0 && (
                     <button
                       onClick={(e) => toggleGewerkEigenleistung(gewerk, alleEigenleistung, e)}

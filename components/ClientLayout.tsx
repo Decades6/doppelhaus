@@ -55,19 +55,19 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
   return (
     <>
       <header className="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700 print:hidden">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
-          <Link href="/" className="text-xl font-bold text-gray-900 dark:text-white hover:text-blue-600 transition-colors">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-3">
+          <Link href="/" className="min-w-0 truncate text-lg sm:text-xl font-bold text-gray-900 dark:text-white hover:text-blue-600 transition-colors">
             Doppelhaus Angebot
           </Link>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 shrink-0">
             <Link
               href="/upload"
-              className="text-sm bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+              className="text-sm bg-blue-600 text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors whitespace-nowrap"
             >
-              PDF hochladen
+              <span className="sm:hidden">PDF</span><span className="hidden sm:inline">PDF hochladen</span>
             </Link>
             <div className="flex items-center gap-2 pl-3 border-l border-gray-200 dark:border-gray-600">
-              <span className="text-sm text-gray-500 dark:text-gray-400 capitalize">{familienname}</span>
+              <span className="hidden sm:inline text-sm text-gray-500 dark:text-gray-400 capitalize">{familienname}</span>
               <button
                 onClick={handleLogout}
                 className="text-sm text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 transition-colors"
@@ -79,7 +79,7 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </header>
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
         {children}
       </main>
     </>

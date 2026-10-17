@@ -177,7 +177,7 @@ export default function ZahlungenTab() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between gap-3 flex-wrap mb-6">
         <div>
           <h2 className="text-xl font-bold text-gray-900 dark:text-white">Zahlungserfassung</h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Erfasse alle geleisteten Zahlungen rund ums Haus</p>
@@ -275,7 +275,7 @@ export default function ZahlungenTab() {
           <div>
             <label className="text-xs text-gray-400 mb-1 block">Kategorie</label>
             <select value={form.kategorie} onChange={e => setForm(p => ({ ...p, kategorie: e.target.value }))}
-              className="text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100">
+              className="max-w-full text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100">
               {KATEGORIEN.map(k => <option key={k}>{k}</option>)}
             </select>
           </div>
@@ -306,8 +306,8 @@ export default function ZahlungenTab() {
       ) : (
         <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
           {/* Zahlungsliste */}
-          <div className="xl:col-span-3 bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden">
-            <table className="w-full text-sm">
+          <div className="xl:col-span-3 bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-x-auto">
+            <table className="w-full min-w-[34rem] text-sm">
               <thead>
                 <tr className="bg-gray-50 dark:bg-gray-700 border-b border-gray-100 dark:border-gray-600 text-xs text-gray-500 dark:text-gray-400">
                   <th className="px-5 py-3 text-left font-medium">Datum</th>
@@ -325,7 +325,7 @@ export default function ZahlungenTab() {
                     <td className="px-5 py-3">
                       <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">{z.kategorie || 'Sonstiges'}</span>
                     </td>
-                    <td className="px-5 py-3 text-right font-medium text-gray-900 dark:text-white">{formatEuro(z.betrag)}</td>
+                    <td className="px-5 py-3 text-right font-medium text-gray-900 dark:text-white whitespace-nowrap">{formatEuro(z.betrag)}</td>
                     <td className="px-5 py-3 text-center whitespace-nowrap">
                       <button onClick={() => bearbeitungStarten(z)} className="text-gray-300 hover:text-amber-500 transition-colors mr-1" title="Bearbeiten">✎</button>
                       <button onClick={() => loeschen(z.id)} className="text-gray-300 hover:text-red-400 transition-colors text-lg leading-none">×</button>

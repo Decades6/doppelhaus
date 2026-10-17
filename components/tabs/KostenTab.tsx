@@ -649,7 +649,7 @@ export default function KostenTab() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6 print:hidden">
+      <div className="flex items-center justify-between gap-3 flex-wrap mb-6 print:hidden">
         <h2 className="text-xl font-bold text-gray-900 dark:text-white">Gesamtkostenübersicht</h2>
         <div className="flex items-center gap-3">
           {speichern && <span className="text-xs text-gray-400">Speichert...</span>}
@@ -665,8 +665,8 @@ export default function KostenTab() {
         <p className="text-sm text-gray-500 mt-1">Stand: {new Date().toLocaleDateString('de-DE')}</p>
       </div>
 
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden print:shadow-none print:border print:border-gray-200">
-        <table className="w-full text-sm">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-x-auto print:shadow-none print:border print:border-gray-200">
+        <table className="w-full min-w-[36rem] text-sm">
           <thead>
             <tr className="bg-gray-50 dark:bg-gray-700 border-b border-gray-100 dark:border-gray-600">
               <th className="px-6 py-3 text-left font-semibold text-gray-700 dark:text-gray-200">Kostenstelle</th>

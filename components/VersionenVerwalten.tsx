@@ -36,7 +36,7 @@ export default function VersionenVerwalten({ versionen, onGeloescht }: Props) {
       {offen && (
         <div className="border-t border-gray-100 dark:border-gray-600 divide-y divide-gray-50 dark:divide-gray-700">
           {versionen.map(v => (
-            <div key={v.id} className="px-4 py-3 flex items-center justify-between">
+            <div key={v.id} className="px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
               <div>
                 <div className="text-sm font-medium text-gray-800 dark:text-gray-100">{v.name}</div>
                 <div className="text-xs text-gray-400 dark:text-gray-500">
