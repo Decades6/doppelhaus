@@ -72,6 +72,16 @@ export interface Zahlung {
   created_at: string;
 }
 
+/** Eine Rechnung (PDF oder Bild) zu einer Zahlung — Datei liegt im Storage-Bucket "rechnungen" */
+export interface Rechnung {
+  id: string;
+  zahlung_id: string;
+  user_id: string;
+  pfad: string;
+  dateiname: string;
+  created_at: string;
+}
+
 export interface ParsedPosition {
   position_nr?: string;
   gewerk: string;

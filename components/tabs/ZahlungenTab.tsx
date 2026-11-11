@@ -1,9 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Zahlung } from '@/lib/types';
+import { Zahlung, Rechnung } from '@/lib/types';
 import { formatEuro, parseGermanNumber, formatGermanNumber } from '@/lib/utils';
+import { erzeugeBankPdf, type Beleg } from '@/lib/bank-pdf';
+import { DATEI_ENDUNGEN, bildAlsJpeg, istPdf } from '@/lib/bild';
 import { KATEGORIEN_NAMEN, BAUNEBENKOSTEN_KEYS } from '@/components/tabs/KostenTab';
 import { ANSCHLUSS_POSTEN } from '@/lib/anschluesse';
 
@@ -62,7 +64,16 @@ export default function ZahlungenTab() {
   const [bankPanelOffen, setBankPanelOffen] = useState(false);
   const [bankVon, setBankVon] = useState('');
   const [bankBis, setBankBis] = useState('');
-  const [bankDruck, setBankDruck] = useState(false);
+  const [bankMitRechnungen, setBankMitRechnungen] = useState(true);
+  const [bankErzeugt, setBankErzeugt] = useState(false);
+  const [bankFehler, setBankFehler] = useState('');
+  const [rechnungen, setRechnungen] = useState<Record<string, Rechnung[]>>({});
+  const [uploadZahlungId, setUploadZahlungId] = useState<string | null>(null);
+  const [auswahlZahlungId, setAuswahlZahlungId] = useState<string | null>(null);
+  const zielZahlungId = useRef<string | null>(null);
+  const dateiInput = useRef<HTMLInputElement>(null);
+  const kameraInput = useRef<HTMLInputElement>(null);
+  const [rechnungFehler, setRechnungFehler] = useState('');
   const [bearbeitungId, setBearbeitungId] = useState<string | null>(null);
   const [form, setForm] = useState({
     datum: new Date().toISOString().split('T')[0],
@@ -73,23 +84,20 @@ export default function ZahlungenTab() {
 
   useEffect(() => { ladeZahlungen(); }, []);
 
-  // Druckdialog öffnen, sobald der Bericht gerendert ist; danach wieder zur normalen Ansicht.
-  useEffect(() => {
-    if (!bankDruck) return;
-    const zuruecksetzen = () => setBankDruck(false);
-    window.addEventListener('afterprint', zuruecksetzen);
-    window.print();
-    return () => window.removeEventListener('afterprint', zuruecksetzen);
-  }, [bankDruck]);
-
   async function ladeZahlungen() {
-    const [{ data: z }, { data: v }, { data: em }, { data: km }] = await Promise.all([
+    const [{ data: z }, { data: v }, { data: em }, { data: km }, { data: rg }] = await Promise.all([
       supabase.from('zahlungen').select('*').order('datum', { ascending: false }),
       supabase.from('kosten_positionen').select('id, kategorie, bezeichnung, betrag, bank_relevant').order('kategorie').order('bezeichnung'),
       supabase.from('eigenleistung_materialien').select('id, gewerk, bezeichnung, gesamtpreis').order('gewerk').order('bezeichnung'),
       supabase.from('kosten_manuell').select('schluessel, betrag, bank_relevant'),
+      supabase.from('zahlung_rechnungen').select('*').order('created_at', { ascending: true }),
     ]);
     if (z) setZahlungen(z as Zahlung[]);
+    if (rg) {
+      const nachZahlung: Record<string, Rechnung[]> = {};
+      for (const r of rg as Rechnung[]) (nachZahlung[r.zahlung_id] ??= []).push(r);
+      setRechnungen(nachZahlung);
+    }
 
     // Anschlüsse in Vorlagen-Form bringen. Als Bezeichnung dient der eindeutige Name
     // ("Verwaltungsgebühr Sielanschluss") — darüber ordnet die Ampel im Kosten-Tab zu.
@@ -184,8 +192,96 @@ export default function ZahlungenTab() {
   }
 
   async function loeschen(id: string) {
+    // Dateien zuerst entfernen — die Datenbankzeilen verschwinden per Cascade mit der Zahlung
+    const dateien = (rechnungen[id] ?? []).map(r => r.pfad);
+    if (dateien.length > 0) await supabase.storage.from('rechnungen').remove(dateien);
     await supabase.from('zahlungen').delete().eq('id', id);
     setZahlungen(prev => prev.filter(z => z.id !== id));
+    setRechnungen(prev => Object.fromEntries(Object.entries(prev).filter(([key]) => key !== id)));
+  }
+
+  async function rechnungenHochladen(zahlungId: string, dateien: FileList | null) {
+    if (!dateien || dateien.length === 0) return;
+    setRechnungFehler('');
+    setUploadZahlungId(zahlungId);
+    const { data: { user } } = await supabase.auth.getUser();
+    const neu: Rechnung[] = [];
+    for (const original of Array.from(dateien)) {
+      // Kamera-Fotos haben teils keine Endung im Namen — dann zählt der Typ
+      if (!DATEI_ENDUNGEN.test(original.name) && !original.type.startsWith('image/')) {
+        setRechnungFehler(`„${original.name}“ wird nicht unterstützt — erlaubt sind PDF und Fotos (JPG, PNG, HEIC).`);
+        continue;
+      }
+      let datei = original;
+      if (!istPdf(original)) {
+        try {
+          datei = await bildAlsJpeg(original);
+        } catch {
+          setRechnungFehler(`„${original.name}“ konnte nicht als Bild gelesen werden.`);
+          continue;
+        }
+      }
+      const pfad = `${user?.id}/${zahlungId}/${Date.now()}-${datei.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+      const { error: upErr } = await supabase.storage.from('rechnungen').upload(pfad, datei, { contentType: datei.type || undefined });
+      if (upErr) { setRechnungFehler(`Upload fehlgeschlagen: ${upErr.message}`); continue; }
+      const { data, error } = await supabase
+        .from('zahlung_rechnungen')
+        .insert({ zahlung_id: zahlungId, pfad, dateiname: datei.name })
+        .select().single();
+      if (error || !data) {
+        await supabase.storage.from('rechnungen').remove([pfad]);
+        setRechnungFehler(`Speichern fehlgeschlagen: ${error?.message ?? 'unbekannter Fehler'}`);
+        continue;
+      }
+      neu.push(data as Rechnung);
+    }
+    if (neu.length > 0) setRechnungen(prev => ({ ...prev, [zahlungId]: [...(prev[zahlungId] ?? []), ...neu] }));
+    setUploadZahlungId(null);
+  }
+
+  async function rechnungOeffnen(r: Rechnung) {
+    const { data, error } = await supabase.storage.from('rechnungen').createSignedUrl(r.pfad, 120);
+    if (error || !data) { setRechnungFehler(`Öffnen fehlgeschlagen: ${error?.message ?? 'unbekannter Fehler'}`); return; }
+    window.open(data.signedUrl, '_blank', 'noopener');
+  }
+
+  async function rechnungLoeschen(r: Rechnung) {
+    const { error } = await supabase.from('zahlung_rechnungen').delete().eq('id', r.id);
+    if (error) { setRechnungFehler(`Löschen fehlgeschlagen: ${error.message}`); return; }
+    await supabase.storage.from('rechnungen').remove([r.pfad]);
+    setRechnungen(prev => ({ ...prev, [r.zahlung_id]: (prev[r.zahlung_id] ?? []).filter(x => x.id !== r.id) }));
+  }
+
+  async function bankPdfErstellen() {
+    setBankFehler('');
+    setBankErzeugt(true);
+    try {
+      const belege = new Map<string, Beleg[]>();
+      if (bankMitRechnungen) {
+        for (const block of bankBloecke) {
+          for (const z of block.eintraege) {
+            const liste: Beleg[] = [];
+            for (const r of rechnungen[z.id] ?? []) {
+              const { data, error } = await supabase.storage.from('rechnungen').download(r.pfad);
+              if (error || !data) throw new Error(`„${r.dateiname}“ konnte nicht geladen werden: ${error?.message ?? 'unbekannter Fehler'}`);
+              liste.push({ dateiname: r.dateiname, bytes: await data.arrayBuffer() });
+            }
+            if (liste.length > 0) belege.set(z.id, liste);
+          }
+        }
+      }
+      const bytes = await erzeugeBankPdf({ bloecke: bankBloecke, gesamt: bankGesamt, von: bankVon, bis: bankBis, belege });
+      const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: 'application/pdf' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Bank-Nachweis ${new Date().toISOString().slice(0, 10)}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setBankFehler(e instanceof Error ? e.message : 'PDF konnte nicht erstellt werden.');
+    } finally {
+      setBankErzeugt(false);
+    }
   }
 
   const gesamtBezahlt = zahlungen.reduce((s, z) => s + z.betrag, 0);
@@ -233,12 +329,12 @@ export default function ZahlungenTab() {
   })();
   const bankGesamt = bankBloecke.reduce((s, b) => s + b.summe, 0);
   const bankAnzahl = bankBloecke.reduce((s, b) => s + b.eintraege.length, 0);
+  const bankOhneRechnung = bankBloecke.reduce((s, b) => s + b.eintraege.filter(z => !(rechnungen[z.id]?.length)).length, 0);
 
   if (laden) return <div className="text-center py-16 text-gray-500">Lade Daten...</div>;
 
   return (
     <div>
-      <div className={bankDruck ? 'print:hidden' : ''}>
       <div className="flex items-center justify-between gap-3 flex-wrap mb-6">
         <div>
           <h2 className="text-xl font-bold text-gray-900 dark:text-white">Zahlungserfassung</h2>
@@ -284,11 +380,21 @@ export default function ZahlungenTab() {
             <div className="text-sm text-gray-500 dark:text-gray-400 py-2">
               {bankAnzahl} {bankAnzahl === 1 ? 'Zahlung' : 'Zahlungen'} · <span className="font-semibold text-gray-800 dark:text-white">{formatEuro(bankGesamt)}</span>
             </div>
-            <button onClick={() => setBankDruck(true)} disabled={bankAnzahl === 0}
+            <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300 py-2 cursor-pointer">
+              <input type="checkbox" checked={bankMitRechnungen} onChange={e => setBankMitRechnungen(e.target.checked)} />
+              Rechnungen anhängen
+            </label>
+            <button onClick={bankPdfErstellen} disabled={bankAnzahl === 0 || bankErzeugt}
               className="ml-auto text-sm text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed px-5 py-2 rounded-lg transition-colors whitespace-nowrap">
-              PDF erstellen
+              {bankErzeugt ? 'Erstelle …' : 'PDF erstellen'}
             </button>
           </div>
+          {bankMitRechnungen && bankOhneRechnung > 0 && bankAnzahl > 0 && (
+            <p className="text-xs text-amber-600 dark:text-amber-400 mt-3">
+              Zu {bankOhneRechnung} von {bankAnzahl} Zahlungen ist noch keine Rechnung hinterlegt.
+            </p>
+          )}
+          {bankFehler && <p className="text-xs text-red-600 dark:text-red-400 mt-3">{bankFehler}</p>}
         </div>
       )}
 
@@ -403,6 +509,16 @@ export default function ZahlungenTab() {
         </div>
       </div>
 
+      {/* Gemeinsame, versteckte Eingabefelder für den Rechnungs-Upload */}
+      <input ref={dateiInput} type="file" multiple accept="application/pdf,image/*,.heic,.heif" className="hidden"
+        onChange={e => { if (zielZahlungId.current) rechnungenHochladen(zielZahlungId.current, e.target.files); e.target.value = ''; }} />
+      <input ref={kameraInput} type="file" accept="image/*" capture="environment" className="hidden"
+        onChange={e => { if (zielZahlungId.current) rechnungenHochladen(zielZahlungId.current, e.target.files); e.target.value = ''; }} />
+
+      {rechnungFehler && (
+        <div className="text-sm text-red-600 dark:text-red-400 mb-4">{rechnungFehler}</div>
+      )}
+
       {zahlungen.length === 0 ? (
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-10 text-center text-gray-400">
           Noch keine Zahlungen erfasst.
@@ -425,7 +541,37 @@ export default function ZahlungenTab() {
                 {zahlungen.map(z => (
                   <tr key={z.id} className={`hover:bg-gray-50 dark:hover:bg-gray-700/50 ${bearbeitungId === z.id ? 'bg-amber-50 dark:bg-amber-900/20' : ''}`}>
                     <td className="px-5 py-3 text-gray-500 dark:text-gray-400 whitespace-nowrap">{formatDatumDE(z.datum)}</td>
-                    <td className="px-5 py-3 text-gray-800 dark:text-gray-200">{z.beschreibung}</td>
+                    <td className="px-5 py-3 text-gray-800 dark:text-gray-200">
+                      {z.beschreibung}
+                      <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                        {(rechnungen[z.id] ?? []).map(r => (
+                          <span key={r.id} className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 max-w-56">
+                            <button onClick={() => rechnungOeffnen(r)} className="truncate hover:underline" title={`${r.dateiname} öffnen`}>📎 {r.dateiname}</button>
+                            <button onClick={() => rechnungLoeschen(r)} className="text-blue-300 hover:text-red-500" title="Rechnung entfernen">×</button>
+                          </span>
+                        ))}
+                        {uploadZahlungId === z.id ? (
+                          <span className="text-xs text-gray-400">Lädt hoch …</span>
+                        ) : auswahlZahlungId === z.id ? (
+                          <span className="inline-flex items-center gap-1.5 text-xs">
+                            <button onClick={() => { zielZahlungId.current = z.id; setAuswahlZahlungId(null); dateiInput.current?.click(); }}
+                              className="px-2 py-0.5 rounded-full border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-blue-400">
+                              📁 Datei wählen
+                            </button>
+                            <button onClick={() => { zielZahlungId.current = z.id; setAuswahlZahlungId(null); kameraInput.current?.click(); }}
+                              className="px-2 py-0.5 rounded-full border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-blue-400">
+                              📷 Foto aufnehmen
+                            </button>
+                            <button onClick={() => setAuswahlZahlungId(null)} className="text-gray-400 hover:text-gray-600" title="Abbrechen">×</button>
+                          </span>
+                        ) : (
+                          <button onClick={() => setAuswahlZahlungId(z.id)} disabled={uploadZahlungId !== null}
+                            className="text-xs text-gray-400 hover:text-blue-500 transition-colors disabled:opacity-50">
+                            + Rechnung
+                          </button>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-5 py-3">
                       <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">{z.kategorie || 'Sonstiges'}</span>
                     </td>
@@ -482,50 +628,6 @@ export default function ZahlungenTab() {
               })}
             </div>
           </div>
-        </div>
-      )}
-      </div>
-
-      {/* Bank-PDF: nur im Druck sichtbar, ohne Dark-Mode-Klassen damit das PDF immer hell ist */}
-      {bankDruck && (
-        <div className="hidden print:block">
-          <h1 className="text-2xl font-bold">Nachweis bezahlter Positionen — Neubau Doppelhaus</h1>
-          <p className="text-sm text-gray-500 mt-1 mb-6">
-            Stand: {new Date().toLocaleDateString('de-DE')}
-            {(bankVon || bankBis) && ` · Zeitraum: ${bankVon ? formatDatumDE(bankVon) : 'Beginn'} – ${bankBis ? formatDatumDE(bankBis) : 'heute'}`}
-          </p>
-
-          {bankBloecke.map(block => (
-            <table key={block.id} className="w-full text-sm mb-6" style={{ breakInside: 'avoid-page' }}>
-              <thead>
-                <tr className="print-akzent-grau">
-                  <th colSpan={3} className="px-3 py-2 text-left font-bold">{block.titel}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {block.eintraege.map(z => (
-                  <tr key={z.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
-                    <td className="px-3 py-1.5 whitespace-nowrap w-28">{formatDatumDE(z.datum)}</td>
-                    <td className="px-3 py-1.5">{z.beschreibung}</td>
-                    <td className="px-3 py-1.5 text-right whitespace-nowrap">{formatEuro(z.betrag)}</td>
-                  </tr>
-                ))}
-                <tr>
-                  <td colSpan={2} className="px-3 py-2 font-semibold">Summe {block.titel}</td>
-                  <td className="px-3 py-2 text-right font-semibold whitespace-nowrap">{formatEuro(block.summe)}</td>
-                </tr>
-              </tbody>
-            </table>
-          ))}
-
-          <table className="w-full text-base">
-            <tbody>
-              <tr className="print-akzent-grau">
-                <td className="px-3 py-3 font-bold">Gesamtsumme bezahlter Positionen</td>
-                <td className="px-3 py-3 text-right font-bold whitespace-nowrap">{formatEuro(bankGesamt)}</td>
-              </tr>
-            </tbody>
-          </table>
         </div>
       )}
     </div>
