@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Zahlung } from '@/lib/types';
 import { formatEuro, parseGermanNumber, formatGermanNumber } from '@/lib/utils';
-import { KATEGORIEN_NAMEN } from '@/components/tabs/KostenTab';
+import { KATEGORIEN_NAMEN, BAUNEBENKOSTEN_KEYS } from '@/components/tabs/KostenTab';
 import { ANSCHLUSS_POSTEN } from '@/lib/anschluesse';
 
 // Kategorien, die es nur bei Zahlungen gibt (keine Kostenpositionen-Kategorie).
@@ -25,7 +25,27 @@ function kostenZuZahlung(kategorie: string): string {
   return KATEGORIEN_NAMEN[kategorie as keyof typeof KATEGORIEN_NAMEN] ?? 'Sonstiges';
 }
 
-interface KostenVorlage { id: string; kategorie: string; bezeichnung: string; betrag: number; }
+interface KostenVorlage { id: string; kategorie: string; bezeichnung: string; betrag: number; bank_relevant?: boolean; }
+
+// Blöcke der Bank-PDF — entsprechen dem Gesamtfinanzierungsbedarf im Kosten-Tab, ohne Grundstück.
+// Hauskosten (Kategorie "Bauträger") und Material gehören immer dazu; alle übrigen Zahlungen
+// nur, wenn die zugehörige Kostenposition im Kosten-Tab mit "Bank" markiert ist.
+const BANK_BLOECKE = [
+  { id: 'haus',           titel: 'Hauskosten' },
+  { id: 'material',       titel: 'Eigenleistung Materialkosten' },
+  { id: 'baunebenkosten', titel: 'Baunebenkosten' },
+  { id: 'aussenanlagen',  titel: 'Außenanlagen' },
+  { id: 'weitere',        titel: 'Weitere markierte Positionen' },
+] as const;
+type BankBlockId = typeof BANK_BLOECKE[number]['id'];
+
+/** Kostenpositions-Kategorie → Block der Bank-PDF */
+function kostenZuBankBlock(kategorie: string): BankBlockId {
+  if (kategorie === ANSCHLUSS_KATEGORIE) return 'baunebenkosten';
+  if ((BAUNEBENKOSTEN_KEYS as readonly string[]).includes(kategorie)) return 'baunebenkosten';
+  if (kategorie === 'aussenanlagen') return 'aussenanlagen';
+  return 'weitere';
+}
 interface EigenleistungVorlage { id: string; gewerk: string; bezeichnung: string; gesamtpreis: number; }
 
 function formatDatumDE(iso: string): string {
@@ -39,6 +59,10 @@ export default function ZahlungenTab() {
   const [vorlageId, setVorlageId] = useState('');
   const [laden, setLaden] = useState(true);
   const [speichern, setSpeichern] = useState(false);
+  const [bankPanelOffen, setBankPanelOffen] = useState(false);
+  const [bankVon, setBankVon] = useState('');
+  const [bankBis, setBankBis] = useState('');
+  const [bankDruck, setBankDruck] = useState(false);
   const [bearbeitungId, setBearbeitungId] = useState<string | null>(null);
   const [form, setForm] = useState({
     datum: new Date().toISOString().split('T')[0],
@@ -49,20 +73,29 @@ export default function ZahlungenTab() {
 
   useEffect(() => { ladeZahlungen(); }, []);
 
+  // Druckdialog öffnen, sobald der Bericht gerendert ist; danach wieder zur normalen Ansicht.
+  useEffect(() => {
+    if (!bankDruck) return;
+    const zuruecksetzen = () => setBankDruck(false);
+    window.addEventListener('afterprint', zuruecksetzen);
+    window.print();
+    return () => window.removeEventListener('afterprint', zuruecksetzen);
+  }, [bankDruck]);
+
   async function ladeZahlungen() {
     const [{ data: z }, { data: v }, { data: em }, { data: km }] = await Promise.all([
       supabase.from('zahlungen').select('*').order('datum', { ascending: false }),
-      supabase.from('kosten_positionen').select('id, kategorie, bezeichnung, betrag').order('kategorie').order('bezeichnung'),
+      supabase.from('kosten_positionen').select('id, kategorie, bezeichnung, betrag, bank_relevant').order('kategorie').order('bezeichnung'),
       supabase.from('eigenleistung_materialien').select('id, gewerk, bezeichnung, gesamtpreis').order('gewerk').order('bezeichnung'),
-      supabase.from('kosten_manuell').select('schluessel, betrag'),
+      supabase.from('kosten_manuell').select('schluessel, betrag, bank_relevant'),
     ]);
     if (z) setZahlungen(z as Zahlung[]);
 
     // Anschlüsse in Vorlagen-Form bringen. Als Bezeichnung dient der eindeutige Name
     // ("Verwaltungsgebühr Sielanschluss") — darüber ordnet die Ampel im Kosten-Tab zu.
-    const betragNachSchluessel = new Map(
-      ((km ?? []) as { schluessel: string; betrag: number | null }[]).map(r => [r.schluessel, r.betrag ?? 0]),
-    );
+    const kmRows = (km ?? []) as { schluessel: string; betrag: number | null; bank_relevant: boolean | null }[];
+    const betragNachSchluessel = new Map(kmRows.map(r => [r.schluessel, r.betrag ?? 0]));
+    const bankNachSchluessel = new Map(kmRows.map(r => [r.schluessel, r.bank_relevant ?? true]));
     const anschlussVorlagen: KostenVorlage[] = ANSCHLUSS_POSTEN
       .filter(p => (betragNachSchluessel.get(p.schluessel) ?? 0) > 0)
       .map(p => ({
@@ -70,6 +103,7 @@ export default function ZahlungenTab() {
         kategorie: ANSCHLUSS_KATEGORIE,
         bezeichnung: p.name,
         betrag: betragNachSchluessel.get(p.schluessel) ?? 0,
+        bank_relevant: bankNachSchluessel.get(p.schluessel) ?? true,
       }));
 
     setKostenVorlagen([...((v ?? []) as KostenVorlage[]), ...anschlussVorlagen]);
@@ -173,20 +207,90 @@ export default function ZahlungenTab() {
     summe: zahlungen.filter(z => z.kategorie === k).reduce((s, z) => s + z.betrag, 0),
   })).filter(k => k.summe > 0);
 
+  // ── Bank-PDF: bezahlte, bankrelevante Zahlungen im gewählten Zeitraum, nach Blöcken ──
+  const bankBlockNachName = new Map<string, BankBlockId>();
+  for (const v of kostenVorlagen) {
+    if (v.bank_relevant) bankBlockNachName.set(v.bezeichnung.trim().toLowerCase(), kostenZuBankBlock(v.kategorie));
+  }
+
+  const bankBloecke = (() => {
+    const nachBlock = new Map<BankBlockId, Zahlung[]>(BANK_BLOECKE.map(b => [b.id, []]));
+    for (const z of zahlungen) {
+      if (bankVon && z.datum < bankVon) continue;
+      if (bankBis && z.datum > bankBis) continue;
+      const block: BankBlockId | undefined =
+        z.kategorie === 'Bauträger' ? 'haus'
+        : z.kategorie === 'Material' ? 'material'
+        : bankBlockNachName.get(z.beschreibung.trim().toLowerCase());
+      if (block) nachBlock.get(block)!.push(z);
+    }
+    return BANK_BLOECKE
+      .map(b => {
+        const eintraege = (nachBlock.get(b.id) ?? []).sort((x, y) => x.datum.localeCompare(y.datum));
+        return { ...b, eintraege, summe: eintraege.reduce((s, z) => s + z.betrag, 0) };
+      })
+      .filter(b => b.eintraege.length > 0);
+  })();
+  const bankGesamt = bankBloecke.reduce((s, b) => s + b.summe, 0);
+  const bankAnzahl = bankBloecke.reduce((s, b) => s + b.eintraege.length, 0);
+
   if (laden) return <div className="text-center py-16 text-gray-500">Lade Daten...</div>;
 
   return (
     <div>
+      <div className={bankDruck ? 'print:hidden' : ''}>
       <div className="flex items-center justify-between gap-3 flex-wrap mb-6">
         <div>
           <h2 className="text-xl font-bold text-gray-900 dark:text-white">Zahlungserfassung</h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Erfasse alle geleisteten Zahlungen rund ums Haus</p>
         </div>
-        <div className="text-right">
-          <div className="text-sm text-gray-500 dark:text-gray-400">Gesamt bezahlt</div>
-          <div className="text-2xl font-bold text-green-600 dark:text-green-400">{formatEuro(gesamtBezahlt)}</div>
+        <div className="flex items-center gap-4">
+          <button onClick={() => setBankPanelOffen(o => !o)}
+            className={`text-sm px-4 py-2 rounded-lg border transition-colors whitespace-nowrap ${bankPanelOffen
+              ? 'border-blue-400 text-blue-600 dark:text-blue-300'
+              : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-gray-400'}`}>
+            Bank-PDF
+          </button>
+          <div className="text-right">
+            <div className="text-sm text-gray-500 dark:text-gray-400">Gesamt bezahlt</div>
+            <div className="text-2xl font-bold text-green-600 dark:text-green-400">{formatEuro(gesamtBezahlt)}</div>
+          </div>
         </div>
       </div>
+
+      {bankPanelOffen && (
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 mb-6">
+          <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-300 mb-1">Nachweis bezahlter Positionen für die Bank</h3>
+          <p className="text-xs text-gray-400 mb-4">
+            Enthält Hauskosten, Materialkosten und alle im Kosten-Tab mit „Bank“ markierten Positionen — ohne Grundstück.
+          </p>
+          <div className="flex gap-3 items-end flex-wrap">
+            <div>
+              <label className="text-xs text-gray-400 mb-1 block">Von</label>
+              <input type="date" value={bankVon} onChange={e => setBankVon(e.target.value)}
+                className="text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-400 mb-1 block">Bis</label>
+              <input type="date" value={bankBis} onChange={e => setBankBis(e.target.value)}
+                className="text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100" />
+            </div>
+            {(bankVon || bankBis) && (
+              <button onClick={() => { setBankVon(''); setBankBis(''); }}
+                className="text-sm text-gray-500 dark:text-gray-400 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-gray-400 transition-colors">
+                Zeitraum zurücksetzen
+              </button>
+            )}
+            <div className="text-sm text-gray-500 dark:text-gray-400 py-2">
+              {bankAnzahl} {bankAnzahl === 1 ? 'Zahlung' : 'Zahlungen'} · <span className="font-semibold text-gray-800 dark:text-white">{formatEuro(bankGesamt)}</span>
+            </div>
+            <button onClick={() => setBankDruck(true)} disabled={bankAnzahl === 0}
+              className="ml-auto text-sm text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed px-5 py-2 rounded-lg transition-colors whitespace-nowrap">
+              PDF erstellen
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Formular */}
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 mb-6">
@@ -378,6 +482,50 @@ export default function ZahlungenTab() {
               })}
             </div>
           </div>
+        </div>
+      )}
+      </div>
+
+      {/* Bank-PDF: nur im Druck sichtbar, ohne Dark-Mode-Klassen damit das PDF immer hell ist */}
+      {bankDruck && (
+        <div className="hidden print:block">
+          <h1 className="text-2xl font-bold">Nachweis bezahlter Positionen — Neubau Doppelhaus</h1>
+          <p className="text-sm text-gray-500 mt-1 mb-6">
+            Stand: {new Date().toLocaleDateString('de-DE')}
+            {(bankVon || bankBis) && ` · Zeitraum: ${bankVon ? formatDatumDE(bankVon) : 'Beginn'} – ${bankBis ? formatDatumDE(bankBis) : 'heute'}`}
+          </p>
+
+          {bankBloecke.map(block => (
+            <table key={block.id} className="w-full text-sm mb-6" style={{ breakInside: 'avoid-page' }}>
+              <thead>
+                <tr className="print-akzent-grau">
+                  <th colSpan={3} className="px-3 py-2 text-left font-bold">{block.titel}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {block.eintraege.map(z => (
+                  <tr key={z.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                    <td className="px-3 py-1.5 whitespace-nowrap w-28">{formatDatumDE(z.datum)}</td>
+                    <td className="px-3 py-1.5">{z.beschreibung}</td>
+                    <td className="px-3 py-1.5 text-right whitespace-nowrap">{formatEuro(z.betrag)}</td>
+                  </tr>
+                ))}
+                <tr>
+                  <td colSpan={2} className="px-3 py-2 font-semibold">Summe {block.titel}</td>
+                  <td className="px-3 py-2 text-right font-semibold whitespace-nowrap">{formatEuro(block.summe)}</td>
+                </tr>
+              </tbody>
+            </table>
+          ))}
+
+          <table className="w-full text-base">
+            <tbody>
+              <tr className="print-akzent-grau">
+                <td className="px-3 py-3 font-bold">Gesamtsumme bezahlter Positionen</td>
+                <td className="px-3 py-3 text-right font-bold whitespace-nowrap">{formatEuro(bankGesamt)}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       )}
     </div>
