@@ -70,6 +70,7 @@ export default function ZahlungenTab() {
   const [rechnungen, setRechnungen] = useState<Record<string, Rechnung[]>>({});
   const [uploadZahlungId, setUploadZahlungId] = useState<string | null>(null);
   const [auswahlZahlungId, setAuswahlZahlungId] = useState<string | null>(null);
+  const [vorhandenZahlungId, setVorhandenZahlungId] = useState<string | null>(null);
   const zielZahlungId = useRef<string | null>(null);
   const dateiInput = useRef<HTMLInputElement>(null);
   const kameraInput = useRef<HTMLInputElement>(null);
@@ -193,7 +194,11 @@ export default function ZahlungenTab() {
 
   async function loeschen(id: string) {
     // Dateien zuerst entfernen — die Datenbankzeilen verschwinden per Cascade mit der Zahlung
-    const dateien = (rechnungen[id] ?? []).map(r => r.pfad);
+    // — außer eine Datei belegt auch eine andere Zahlung
+    const anderweitigGenutzt = new Set(
+      Object.entries(rechnungen).filter(([zid]) => zid !== id).flatMap(([, liste]) => liste.map(r => r.pfad)),
+    );
+    const dateien = (rechnungen[id] ?? []).map(r => r.pfad).filter(p => !anderweitigGenutzt.has(p));
     if (dateien.length > 0) await supabase.storage.from('rechnungen').remove(dateien);
     await supabase.from('zahlungen').delete().eq('id', id);
     setZahlungen(prev => prev.filter(z => z.id !== id));
@@ -248,8 +253,39 @@ export default function ZahlungenTab() {
   async function rechnungLoeschen(r: Rechnung) {
     const { error } = await supabase.from('zahlung_rechnungen').delete().eq('id', r.id);
     if (error) { setRechnungFehler(`Löschen fehlgeschlagen: ${error.message}`); return; }
-    await supabase.storage.from('rechnungen').remove([r.pfad]);
+    // Datei nur löschen, wenn sie keine andere Zahlung mehr belegt
+    const nochGenutzt = Object.values(rechnungen).flat().some(x => x.id !== r.id && x.pfad === r.pfad);
+    if (!nochGenutzt) await supabase.storage.from('rechnungen').remove([r.pfad]);
     setRechnungen(prev => ({ ...prev, [r.zahlung_id]: (prev[r.zahlung_id] ?? []).filter(x => x.id !== r.id) }));
+  }
+
+  /** Hängt eine bereits hochgeladene Rechnung an eine weitere Zahlung — ohne neuen Upload. */
+  async function rechnungVerknuepfen(zahlungId: string, pfad: string) {
+    setVorhandenZahlungId(null);
+    const quelle = Object.values(rechnungen).flat().find(r => r.pfad === pfad);
+    if (!quelle) return;
+    setRechnungFehler('');
+    const { data, error } = await supabase
+      .from('zahlung_rechnungen')
+      .insert({ zahlung_id: zahlungId, pfad: quelle.pfad, dateiname: quelle.dateiname })
+      .select().single();
+    if (error || !data) { setRechnungFehler(`Verknüpfen fehlgeschlagen: ${error?.message ?? 'unbekannter Fehler'}`); return; }
+    setRechnungen(prev => ({ ...prev, [zahlungId]: [...(prev[zahlungId] ?? []), data as Rechnung] }));
+  }
+
+  /** Alle Rechnungsdateien (je Datei einmal), die noch nicht an dieser Zahlung hängen. */
+  function vorhandeneRechnungen(zahlungId: string) {
+    const schonDran = new Set((rechnungen[zahlungId] ?? []).map(r => r.pfad));
+    const gesehen = new Set<string>();
+    const liste: { pfad: string; label: string }[] = [];
+    for (const z of zahlungen) {
+      for (const r of rechnungen[z.id] ?? []) {
+        if (z.id === zahlungId || schonDran.has(r.pfad) || gesehen.has(r.pfad)) continue;
+        gesehen.add(r.pfad);
+        liste.push({ pfad: r.pfad, label: `${r.dateiname} — ${formatDatumDE(z.datum)} ${z.beschreibung}` });
+      }
+    }
+    return liste;
   }
 
   async function bankPdfErstellen() {
@@ -258,13 +294,19 @@ export default function ZahlungenTab() {
     try {
       const belege = new Map<string, Beleg[]>();
       if (bankMitRechnungen) {
+        const geladen = new Map<string, ArrayBuffer>(); // je Datei nur einmal herunterladen
         for (const block of bankBloecke) {
           for (const z of block.eintraege) {
             const liste: Beleg[] = [];
             for (const r of rechnungen[z.id] ?? []) {
-              const { data, error } = await supabase.storage.from('rechnungen').download(r.pfad);
-              if (error || !data) throw new Error(`„${r.dateiname}“ konnte nicht geladen werden: ${error?.message ?? 'unbekannter Fehler'}`);
-              liste.push({ dateiname: r.dateiname, bytes: await data.arrayBuffer() });
+              let bytes = geladen.get(r.pfad);
+              if (!bytes) {
+                const { data, error } = await supabase.storage.from('rechnungen').download(r.pfad);
+                if (error || !data) throw new Error(`„${r.dateiname}“ konnte nicht geladen werden: ${error?.message ?? 'unbekannter Fehler'}`);
+                bytes = await data.arrayBuffer();
+                geladen.set(r.pfad, bytes);
+              }
+              liste.push({ dateiname: r.dateiname, bytes, schluessel: r.pfad });
             }
             if (liste.length > 0) belege.set(z.id, liste);
           }
@@ -562,7 +604,22 @@ export default function ZahlungenTab() {
                               className="px-2 py-0.5 rounded-full border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-blue-400">
                               📷 Foto aufnehmen
                             </button>
+                            {vorhandeneRechnungen(z.id).length > 0 && (
+                              <button onClick={() => { setAuswahlZahlungId(null); setVorhandenZahlungId(z.id); }}
+                                className="px-2 py-0.5 rounded-full border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-blue-400">
+                                🔗 Vorhandene Rechnung
+                              </button>
+                            )}
                             <button onClick={() => setAuswahlZahlungId(null)} className="text-gray-400 hover:text-gray-600" title="Abbrechen">×</button>
+                          </span>
+                        ) : vorhandenZahlungId === z.id ? (
+                          <span className="inline-flex items-center gap-1.5 text-xs">
+                            <select defaultValue="" onChange={e => e.target.value && rechnungVerknuepfen(z.id, e.target.value)}
+                              className="max-w-72 text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200">
+                              <option value="">– Rechnung wählen –</option>
+                              {vorhandeneRechnungen(z.id).map(v => <option key={v.pfad} value={v.pfad}>{v.label}</option>)}
+                            </select>
+                            <button onClick={() => setVorhandenZahlungId(null)} className="text-gray-400 hover:text-gray-600" title="Abbrechen">×</button>
                           </span>
                         ) : (
                           <button onClick={() => setAuswahlZahlungId(z.id)} disabled={uploadZahlungId !== null}

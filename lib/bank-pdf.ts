@@ -14,6 +14,9 @@ export interface BankBlock {
 export interface Beleg {
   dateiname: string;
   bytes: ArrayBuffer;
+  /** Identifiziert die Datei (Storage-Pfad). Hängt dieselbe Datei an mehreren Zahlungen,
+   *  wird sie nur einmal angehängt. */
+  schluessel: string;
 }
 
 export interface BankPdfEingabe {
@@ -127,10 +130,28 @@ export async function erzeugeBankPdf(eingabe: BankPdfEingabe): Promise<Uint8Arra
   betragRechts(formatEuro(eingabe.gesamt), y - 18, fett, 11.5);
 
   // ── Rechnungen anhängen, in Berichtsreihenfolge ──
+  // Eine Datei kann zu mehreren Zahlungen gehören: sie kommt nur einmal (bei der ersten
+  // Zahlung) und nennt in der Fußzeile alle Zahlungen, die sie belegt.
+  const zahlungenJeBeleg = new Map<string, Zahlung[]>();
   for (const block of eingabe.bloecke) {
     for (const z of block.eintraege) {
-      const stempel = `Beleg zu: ${datumDE(z.datum)} – ${z.beschreibung} – ${formatEuro(z.betrag)}`;
       for (const beleg of eingabe.belege.get(z.id) ?? []) {
+        zahlungenJeBeleg.set(beleg.schluessel, [...(zahlungenJeBeleg.get(beleg.schluessel) ?? []), z]);
+      }
+    }
+  }
+  const schonAngehaengt = new Set<string>();
+  const beschreibung = (z: Zahlung) => `${datumDE(z.datum)} – ${z.beschreibung} – ${formatEuro(z.betrag)}`;
+
+  for (const block of eingabe.bloecke) {
+    for (const z of block.eintraege) {
+      for (const beleg of eingabe.belege.get(z.id) ?? []) {
+        if (schonAngehaengt.has(beleg.schluessel)) continue;
+        schonAngehaengt.add(beleg.schluessel);
+        const belegte = zahlungenJeBeleg.get(beleg.schluessel) ?? [z];
+        const stempel = belegte.length === 1
+          ? `Beleg zu: ${beschreibung(belegte[0])}`
+          : `Beleg zu ${belegte.length} Zahlungen: ${belegte.map(beschreibung).join(' ; ')}`;
         const seiten: PDFPage[] = [];
         try {
           const bild = istBild(beleg.dateiname);
