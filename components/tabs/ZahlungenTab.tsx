@@ -27,27 +27,26 @@ function kostenZuZahlung(kategorie: string): string {
   return KATEGORIEN_NAMEN[kategorie as keyof typeof KATEGORIEN_NAMEN] ?? 'Sonstiges';
 }
 
-interface KostenVorlage { id: string; kategorie: string; bezeichnung: string; betrag: number; bank_relevant?: boolean; }
+interface KostenVorlage { id: string; kategorie: string; bezeichnung: string; betrag: number; }
 
-// Blöcke der Bank-PDF — entsprechen dem Gesamtfinanzierungsbedarf im Kosten-Tab, ohne Grundstück.
-// Hauskosten (Kategorie "Bauträger") und Material gehören immer dazu; alle übrigen Zahlungen
-// nur, wenn die zugehörige Kostenposition im Kosten-Tab mit "Bank" markiert ist.
+// Bankrelevant ist alles, was im Kosten-Tab im Gesamtfinanzierungsbedarf steht — ohne
+// Grundstück. Alles darunter (Inventar, Weitere Kosten) und das Grundstück selbst nicht.
 const BANK_BLOECKE = [
   { id: 'haus',           titel: 'Hauskosten' },
   { id: 'material',       titel: 'Eigenleistung Materialkosten' },
   { id: 'baunebenkosten', titel: 'Baunebenkosten' },
   { id: 'aussenanlagen',  titel: 'Außenanlagen' },
-  { id: 'weitere',        titel: 'Weitere markierte Positionen' },
 ] as const;
 type BankBlockId = typeof BANK_BLOECKE[number]['id'];
 
-/** Kostenpositions-Kategorie → Block der Bank-PDF */
-function kostenZuBankBlock(kategorie: string): BankBlockId {
-  if (kategorie === ANSCHLUSS_KATEGORIE) return 'baunebenkosten';
-  if ((BAUNEBENKOSTEN_KEYS as readonly string[]).includes(kategorie)) return 'baunebenkosten';
-  if (kategorie === 'aussenanlagen') return 'aussenanlagen';
-  return 'weitere';
-}
+/** Zahlungs-Kategorie → Block der Bank-PDF; Kategorien, die hier fehlen, sind nicht bankrelevant. */
+const BANK_BLOCK_NACH_KATEGORIE: Record<string, BankBlockId> = {
+  'Bauträger': 'haus',
+  'Material': 'material',
+  'Anschlüsse': 'baunebenkosten',
+  ...Object.fromEntries(BAUNEBENKOSTEN_KEYS.map(k => [KATEGORIEN_NAMEN[k], 'baunebenkosten' as const])),
+  [KATEGORIEN_NAMEN.aussenanlagen]: 'aussenanlagen',
+};
 interface EigenleistungVorlage { id: string; gewerk: string; bezeichnung: string; gesamtpreis: number; }
 
 function formatDatumDE(iso: string): string {
@@ -88,9 +87,9 @@ export default function ZahlungenTab() {
   async function ladeZahlungen() {
     const [{ data: z }, { data: v }, { data: em }, { data: km }, { data: rg }] = await Promise.all([
       supabase.from('zahlungen').select('*').order('datum', { ascending: false }),
-      supabase.from('kosten_positionen').select('id, kategorie, bezeichnung, betrag, bank_relevant').order('kategorie').order('bezeichnung'),
+      supabase.from('kosten_positionen').select('id, kategorie, bezeichnung, betrag').order('kategorie').order('bezeichnung'),
       supabase.from('eigenleistung_materialien').select('id, gewerk, bezeichnung, gesamtpreis').order('gewerk').order('bezeichnung'),
-      supabase.from('kosten_manuell').select('schluessel, betrag, bank_relevant'),
+      supabase.from('kosten_manuell').select('schluessel, betrag'),
       supabase.from('zahlung_rechnungen').select('*').order('created_at', { ascending: true }),
     ]);
     if (z) setZahlungen(z as Zahlung[]);
@@ -102,9 +101,9 @@ export default function ZahlungenTab() {
 
     // Anschlüsse in Vorlagen-Form bringen. Als Bezeichnung dient der eindeutige Name
     // ("Verwaltungsgebühr Sielanschluss") — darüber ordnet die Ampel im Kosten-Tab zu.
-    const kmRows = (km ?? []) as { schluessel: string; betrag: number | null; bank_relevant: boolean | null }[];
-    const betragNachSchluessel = new Map(kmRows.map(r => [r.schluessel, r.betrag ?? 0]));
-    const bankNachSchluessel = new Map(kmRows.map(r => [r.schluessel, r.bank_relevant ?? true]));
+    const betragNachSchluessel = new Map(
+      ((km ?? []) as { schluessel: string; betrag: number | null }[]).map(r => [r.schluessel, r.betrag ?? 0]),
+    );
     const anschlussVorlagen: KostenVorlage[] = ANSCHLUSS_POSTEN
       .filter(p => (betragNachSchluessel.get(p.schluessel) ?? 0) > 0)
       .map(p => ({
@@ -112,7 +111,6 @@ export default function ZahlungenTab() {
         kategorie: ANSCHLUSS_KATEGORIE,
         bezeichnung: p.name,
         betrag: betragNachSchluessel.get(p.schluessel) ?? 0,
-        bank_relevant: bankNachSchluessel.get(p.schluessel) ?? true,
       }));
 
     setKostenVorlagen([...((v ?? []) as KostenVorlage[]), ...anschlussVorlagen]);
@@ -346,20 +344,25 @@ export default function ZahlungenTab() {
   })).filter(k => k.summe > 0);
 
   // ── Bank-PDF: bezahlte, bankrelevante Zahlungen im gewählten Zeitraum, nach Blöcken ──
+  // Zusätzlich zur Kategorie der Zahlung zählt die Zuordnung über den Namen der Kostenposition
+  // (wie bei der Ampel im Kosten-Tab) — so fällt auch eine falsch kategorisierte Zahlung nicht heraus.
   const bankBlockNachName = new Map<string, BankBlockId>();
   for (const v of kostenVorlagen) {
-    if (v.bank_relevant) bankBlockNachName.set(v.bezeichnung.trim().toLowerCase(), kostenZuBankBlock(v.kategorie));
+    const block = BANK_BLOCK_NACH_KATEGORIE[kostenZuZahlung(v.kategorie)];
+    if (block) bankBlockNachName.set(v.bezeichnung.trim().toLowerCase(), block);
   }
+
+  /** Block der Bank-PDF, in den die Zahlung gehört — undefined, wenn sie nicht bankrelevant ist.
+   *  Dieselbe Regel steuert das "Bank"-Label in der Liste und die PDF. */
+  const bankBlockFuer = (z: Zahlung): BankBlockId | undefined =>
+    BANK_BLOCK_NACH_KATEGORIE[z.kategorie ?? ''] ?? bankBlockNachName.get(z.beschreibung.trim().toLowerCase());
 
   const bankBloecke = (() => {
     const nachBlock = new Map<BankBlockId, Zahlung[]>(BANK_BLOECKE.map(b => [b.id, []]));
     for (const z of zahlungen) {
       if (bankVon && z.datum < bankVon) continue;
       if (bankBis && z.datum > bankBis) continue;
-      const block: BankBlockId | undefined =
-        z.kategorie === 'Bauträger' ? 'haus'
-        : z.kategorie === 'Material' ? 'material'
-        : bankBlockNachName.get(z.beschreibung.trim().toLowerCase());
+      const block = bankBlockFuer(z);
       if (block) nachBlock.get(block)!.push(z);
     }
     return BANK_BLOECKE
@@ -400,7 +403,7 @@ export default function ZahlungenTab() {
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 mb-6">
           <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-300 mb-1">Nachweis bezahlter Positionen für die Bank</h3>
           <p className="text-xs text-gray-400 mb-4">
-            Enthält Hauskosten, Materialkosten und alle im Kosten-Tab mit „Bank“ markierten Positionen — ohne Grundstück.
+            Enthält alles, was im Kosten-Tab über dem Gesamtfinanzierungsbedarf steht — ohne Grundstück.
           </p>
           <div className="flex gap-3 items-end flex-wrap">
             <div>
@@ -631,6 +634,12 @@ export default function ZahlungenTab() {
                     </td>
                     <td className="px-5 py-3">
                       <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">{z.kategorie || 'Sonstiges'}</span>
+                      {bankBlockFuer(z) && (
+                        <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded border border-blue-300 bg-blue-50 text-blue-600 dark:border-blue-500/50 dark:bg-blue-900/30 dark:text-blue-300"
+                          title="Bankrelevant — Teil des Gesamtfinanzierungsbedarfs, erscheint in der Bank-PDF">
+                          Bank
+                        </span>
+                      )}
                     </td>
                     <td className="px-5 py-3 text-right font-medium text-gray-900 dark:text-white whitespace-nowrap">{formatEuro(z.betrag)}</td>
                     <td className="px-5 py-3 text-center whitespace-nowrap">

@@ -29,9 +29,6 @@ export const KATEGORIEN_NAMEN: Record<Kategorie, string> = {
 };
 
 export const BAUNEBENKOSTEN_KEYS: readonly Kategorie[] = ['planung', 'versicherungen', 'nebenkosten', 'baustelle', 'erdarbeiten', 'vermessung'];
-/** Kategorien, deren Positionen beim Anlegen automatisch als bankrelevant markiert werden
- *  (Baunebenkosten + Außenanlagen — Teil des Gesamtfinanzierungsbedarfs ohne Grundstück). */
-const BANK_STANDARD_KEYS: readonly Kategorie[] = [...BAUNEBENKOSTEN_KEYS, 'aussenanlagen'];
 const INVENTAR_KEYS: readonly Kategorie[] = ['kueche', 'hwr'];
 const WEITERE_KOSTEN_KEYS: readonly Kategorie[] = ['abriss', 'erdarbeiten_abriss', 'notar', 'genehmigungen', 'maschinen', 'sonstiges'];
 
@@ -43,21 +40,6 @@ interface KostenPosition {
   menge?: string | null;
   unterkategorie?: string | null;
   zahlungsziel?: string | null;
-  /** Fließt in die Bank-PDF im Zahlungen-Tab ein */
-  bank_relevant?: boolean;
-}
-
-/** Schalter "Bank" an einer Kostenposition — markiert sie für die Bank-PDF. */
-function BankSchalter({ aktiv, onClick }: { aktiv: boolean; onClick: () => void }) {
-  return (
-    <button onClick={onClick}
-      title={aktiv ? 'Bankrelevant — Zahlungen erscheinen in der Bank-PDF (klicken zum Abwählen)' : 'Nicht bankrelevant (klicken zum Markieren)'}
-      className={`ml-2 text-[10px] leading-none px-1.5 py-1 rounded border transition-colors print:hidden ${aktiv
-        ? 'border-blue-300 bg-blue-50 text-blue-600 dark:border-blue-500/50 dark:bg-blue-900/30 dark:text-blue-300'
-        : 'border-gray-200 text-gray-300 hover:text-gray-500 dark:border-gray-600 dark:text-gray-600 dark:hover:text-gray-400'}`}>
-      Bank
-    </button>
-  );
 }
 
 /** Zeigt das Zahlungsziel als farbigen Hinweis: rot wenn überfällig, orange wenn bald fällig. */
@@ -114,7 +96,6 @@ export default function KostenTab() {
   const [anschluesse, setAnschluesse] = useState<Record<string, number>>({});
   const [anschlussEingaben, setAnschlussEingaben] = useState<Record<string, string>>({});
   const [anschlussZiele, setAnschlussZiele] = useState<Record<string, string>>({});
-  const [anschlussBank, setAnschlussBank] = useState<Record<string, boolean>>({});
   const [kostenPositionen, setKostenPositionen] = useState<Record<string, KostenPosition[]>>({});
   const [neuForm, setNeuForm] = useState<Record<string, { bezeichnung: string; betrag: string; menge: string; einzelpreis: string; unterkategorie: string; zahlungsziel: string }>>({});
   const [materialDetails, setMaterialDetails] = useState<Record<string, EigenleistungMaterial[]>>({});
@@ -179,8 +160,8 @@ export default function KostenTab() {
     }
 
     const [{ data: anschlussRows }, { data: positionen }, { data: z }] = await Promise.all([
-      supabase.from('kosten_manuell').select('schluessel, betrag, zahlungsziel, bank_relevant'),
-      supabase.from('kosten_positionen').select('id, kategorie, bezeichnung, betrag, menge, unterkategorie, zahlungsziel, bank_relevant').order('created_at', { ascending: true }),
+      supabase.from('kosten_manuell').select('schluessel, betrag, zahlungsziel'),
+      supabase.from('kosten_positionen').select('id, kategorie, bezeichnung, betrag, menge, unterkategorie, zahlungsziel').order('created_at', { ascending: true }),
       supabase.from('zahlungen').select('beschreibung, kategorie, betrag'),
     ]);
 
@@ -188,19 +169,16 @@ export default function KostenTab() {
       const geladen: Record<string, number> = {};
       const eingaben: Record<string, string> = {};
       const ziele: Record<string, string> = {};
-      const bank: Record<string, boolean> = {};
       for (const row of anschlussRows) {
         if (istAnschluss(row.schluessel)) {
           geladen[row.schluessel] = row.betrag ?? 0;
           eingaben[row.schluessel] = row.betrag ? formatGermanNumber(row.betrag) : '';
           ziele[row.schluessel] = row.zahlungsziel ?? '';
-          bank[row.schluessel] = row.bank_relevant ?? true;
         }
       }
       setAnschluesse(geladen);
       setAnschlussEingaben(eingaben);
       setAnschlussZiele(ziele);
-      setAnschlussBank(bank);
     }
 
     if (positionen) {
@@ -227,13 +205,13 @@ export default function KostenTab() {
     setLaden(false);
   }
 
-  /** Schreibt Betrag, Zahlungsziel und Bank-Markierung immer gemeinsam — beim Upsert würde ein
-   *  einzeln gesendetes Feld die anderen sonst auf null zurücksetzen. */
-  async function anschlussSpeichern(schluessel: string, betrag: number, zahlungsziel: string, bankRelevant: boolean) {
+  /** Schreibt Betrag und Zahlungsziel immer gemeinsam — beim Upsert würde ein
+   *  einzeln gesendetes Feld das jeweils andere sonst auf null zurücksetzen. */
+  async function anschlussSpeichern(schluessel: string, betrag: number, zahlungsziel: string) {
     setSpeichern(true);
     const { data: { user } } = await supabase.auth.getUser();
     await supabase.from('kosten_manuell').upsert(
-      { user_id: user?.id, schluessel, betrag, zahlungsziel: zahlungsziel.trim() || null, bank_relevant: bankRelevant },
+      { user_id: user?.id, schluessel, betrag, zahlungsziel: zahlungsziel.trim() || null },
       { onConflict: 'user_id,schluessel' },
     );
     setSpeichern(false);
@@ -246,34 +224,14 @@ export default function KostenTab() {
 
     if (speicherTimeout.current) clearTimeout(speicherTimeout.current);
     speicherTimeout.current = setTimeout(() => {
-      anschlussSpeichern(schluessel, betrag, anschlussZiele[schluessel] ?? '', anschlussBank[schluessel] ?? true);
+      anschlussSpeichern(schluessel, betrag, anschlussZiele[schluessel] ?? '');
     }, 800);
   }
 
   /** Datum kommt aus einem Datepicker — diskreter Wert, daher ohne Verzögerung speichern. */
   function anschlussZielGeaendert(schluessel: string, datum: string) {
     setAnschlussZiele(prev => ({ ...prev, [schluessel]: datum }));
-    anschlussSpeichern(schluessel, anschluesse[schluessel] ?? 0, datum, anschlussBank[schluessel] ?? true);
-  }
-
-  function anschlussBankUmschalten(schluessel: string) {
-    const neu = !(anschlussBank[schluessel] ?? true);
-    setAnschlussBank(prev => ({ ...prev, [schluessel]: neu }));
-    anschlussSpeichern(schluessel, anschluesse[schluessel] ?? 0, anschlussZiele[schluessel] ?? '', neu);
-  }
-
-  async function positionBankUmschalten(p: KostenPosition) {
-    const neu = !p.bank_relevant;
-    const setzen = (wert: boolean) => setKostenPositionen(prev => ({
-      ...prev,
-      [p.kategorie]: (prev[p.kategorie] ?? []).map(x => x.id === p.id ? { ...x, bank_relevant: wert } : x),
-    }));
-    setzen(neu);
-    const { error } = await supabase.from('kosten_positionen').update({ bank_relevant: neu }).eq('id', p.id);
-    if (error) {
-      console.error('Bank-Markierung speichern fehlgeschlagen:', error);
-      setzen(!neu);
-    }
+    anschlussSpeichern(schluessel, anschluesse[schluessel] ?? 0, datum);
   }
 
   function bearbeitungStarten(pos: KostenPosition) {
@@ -346,7 +304,7 @@ export default function KostenTab() {
       .from('kosten_positionen')
       .update({ bezeichnung: editBezeichnung.trim(), betrag, menge, unterkategorie, zahlungsziel })
       .eq('id', id)
-      .select('id, kategorie, bezeichnung, betrag, menge, unterkategorie, zahlungsziel, bank_relevant')
+      .select('id, kategorie, bezeichnung, betrag, menge, unterkategorie, zahlungsziel')
       .maybeSingle();
 
     setSpeichertEdit(false);
@@ -383,7 +341,7 @@ export default function KostenTab() {
     const { data: { user } } = await supabase.auth.getUser();
     const { data, error } = await supabase
       .from('kosten_positionen')
-      .insert({ user_id: user?.id, kategorie, bezeichnung: f.bezeichnung.trim(), betrag, menge, unterkategorie, zahlungsziel, bank_relevant: BANK_STANDARD_KEYS.includes(kategorie) })
+      .insert({ user_id: user?.id, kategorie, bezeichnung: f.bezeichnung.trim(), betrag, menge, unterkategorie, zahlungsziel })
       .select().single();
 
     if (!error && data) {
@@ -484,7 +442,6 @@ export default function KostenTab() {
               <Ampel bezahlt={bezahltNachBeschreibung[p.bezeichnung.trim().toLowerCase()] ?? 0} gesamt={p.betrag} />
               {formatEuro(p.betrag)}
             </span>
-            <BankSchalter aktiv={!!p.bank_relevant} onClick={() => positionBankUmschalten(p)} />
             <button onClick={() => bearbeitungStarten(p)} className="ml-2 text-gray-300 hover:text-amber-500 transition-colors print:hidden" title="Bearbeiten">✎</button>
             <button onClick={() => positionLoeschen(p.id, key)} className="ml-1 text-gray-300 hover:text-red-400 transition-colors print:hidden">×</button>
           </td>
@@ -644,7 +601,6 @@ export default function KostenTab() {
                   <Ampel bezahlt={bezahltNachBeschreibung[p.bezeichnung.trim().toLowerCase()] ?? 0} gesamt={p.betrag} />
                   {formatEuro(p.betrag)}
                 </span>
-                <BankSchalter aktiv={!!p.bank_relevant} onClick={() => positionBankUmschalten(p)} />
                 <button onClick={() => bearbeitungStarten(p)} className="ml-2 text-gray-300 hover:text-amber-500 transition-colors print:hidden" title="Bearbeiten">✎</button>
                 <button onClick={() => positionLoeschen(p.id, key)} className="ml-1 text-gray-300 hover:text-red-400 transition-colors print:hidden">×</button>
               </td>
@@ -855,7 +811,6 @@ export default function KostenTab() {
                         title="Zahlungsziel"
                         className="w-36 text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1.5 mr-2 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 print:hidden" />
                       <Ampel bezahlt={bezahlt} gesamt={betrag} />
-                      <BankSchalter aktiv={anschlussBank[key] ?? true} onClick={() => anschlussBankUmschalten(key)} />
                       <input type="text" value={anschlussEingaben[key] ?? ''} onChange={e => anschlussGeaendert(key, e.target.value)}
                         placeholder="0,00"
                         className="w-36 text-right text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100 print:border-0 print:bg-transparent" />
