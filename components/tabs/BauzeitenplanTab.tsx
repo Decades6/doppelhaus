@@ -35,6 +35,31 @@ const BALKEN_FARBE: Record<Status, string> = {
   geplant: 'bg-blue-500',
 };
 
+/** Abweichung vom Basisplan: Verzögerung (rot) oder früher als geplant (violett). Maßgeblich ist
+ *  das Ende; ist das gleich geblieben, zählt eine Verschiebung des Anfangs. */
+interface Abweichung { art: 'spaeter' | 'frueher'; tage: number }
+
+function abweichungVon(v: { anfang: string; ende: string; plan_anfang: string | null; plan_ende: string | null }): Abweichung | null {
+  if (!v.plan_anfang || !v.plan_ende) return null;
+  let diff = tageZwischen(v.plan_ende, v.ende);
+  if (diff === 0) diff = tageZwischen(v.plan_anfang, v.anfang);
+  if (diff === 0) return null;
+  return { art: diff > 0 ? 'spaeter' : 'frueher', tage: Math.abs(diff) };
+}
+
+function abweichungText(a: Abweichung): string {
+  return `${a.tage} ${a.tage === 1 ? 'Tag' : 'Tage'} ${a.art === 'spaeter' ? 'später' : 'früher'} als geplant`;
+}
+
+const ABW_BALKEN: Record<Abweichung['art'], string> = {
+  spaeter: 'bg-red-500',
+  frueher: 'bg-violet-500',
+};
+const ABW_TEXT: Record<Abweichung['art'], string> = {
+  spaeter: 'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40',
+  frueher: 'text-violet-600 dark:text-violet-300 bg-violet-50 dark:bg-violet-950/40',
+};
+
 interface Formular {
   id: string | null;
   gewerk: string;
@@ -152,6 +177,13 @@ export default function BauzeitenplanTab() {
   const naechster = [...vorgaenge].filter(v => v.anfang > heute).sort((a, b) => a.anfang.localeCompare(b.anfang))[0];
   const zuletztGeaendert = vorgaenge.reduce<string | null>((m, v) => (!m || v.updated_at > m ? v.updated_at : m), null);
   const gewerke = gruppen.map(g => g.gewerk);
+  // Gesamtverschiebung der Fertigstellung gegenüber dem Basisplan
+  const planLetzter = vorgaenge.reduce<string | null>((m, v) => (v.plan_ende && (!m || v.plan_ende > m) ? v.plan_ende : m), null);
+  const gesamtAbweichung = zeitachse && planLetzter && zeitachse.letzter !== planLetzter
+    ? abweichungVon({ anfang: zeitachse.letzter, ende: zeitachse.letzter, plan_anfang: planLetzter, plan_ende: planLetzter })
+    : null;
+  const anzahlSpaeter = vorgaenge.filter(v => abweichungVon(v)?.art === 'spaeter').length;
+  const anzahlFrueher = vorgaenge.filter(v => abweichungVon(v)?.art === 'frueher').length;
 
   // ---------- Kalender-Abo ----------
 
@@ -306,6 +338,14 @@ export default function BauzeitenplanTab() {
             <div className="text-xs text-gray-500 dark:text-gray-400">Fertigstellung</div>
             <div className="text-lg font-bold text-gray-900 dark:text-white mt-1">{datumKurz(zeitachse.letzter)}</div>
             <div className="text-xs text-gray-400 mt-0.5">KW {kalenderwoche(zeitachse.letzter)}</div>
+            {gesamtAbweichung && (
+              <div className={`text-xs mt-1 inline-block px-1.5 py-0.5 rounded ${ABW_TEXT[gesamtAbweichung.art]}`}>
+                {abweichungText(gesamtAbweichung)}
+              </div>
+            )}
+            {!gesamtAbweichung && (anzahlSpaeter > 0 || anzahlFrueher > 0) && (
+              <div className="text-xs text-gray-400 mt-1">Ende wie geplant</div>
+            )}
           </div>
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-4 min-w-0">
             <div className="text-xs text-gray-500 dark:text-gray-400">{laufend.length > 0 ? 'Gerade dran' : 'Als Nächstes'}</div>
@@ -378,6 +418,17 @@ export default function BauzeitenplanTab() {
                 <input inputMode="decimal" value={formular.dauer} onChange={e => setFormular(f => f && { ...f, dauer: e.target.value })} className={EINGABE} />
                 <p className="text-xs text-gray-400 mt-1">Wird beim Ändern der Daten neu vorgeschlagen (Mo–Fr ohne Feiertage) und kann angepasst werden.</p>
               </div>
+              {(() => {
+                const aktuell = vorgaenge.find(v => v.id === formular.id);
+                if (!aktuell?.plan_anfang || !aktuell.plan_ende) return null;
+                const abw = abweichungVon({ anfang: formular.anfang, ende: formular.ende, plan_anfang: aktuell.plan_anfang, plan_ende: aktuell.plan_ende });
+                return (
+                  <div className="col-span-2 text-xs text-gray-500 dark:text-gray-400">
+                    Basisplan: {zeitraum({ anfang: aktuell.plan_anfang, ende: aktuell.plan_ende } as Bauvorgang)}
+                    {abw && <span className={`ml-2 px-1.5 py-0.5 rounded ${ABW_TEXT[abw.art]}`}>{abweichungText(abw)}</span>}
+                  </div>
+                );
+              })()}
             </div>
 
             {loeschenFragen ? (
@@ -463,19 +514,26 @@ export default function BauzeitenplanTab() {
                     {/* Vorgänge */}
                     {g.liste.map(v => {
                       const status = statusVon(v, heute);
+                      const abw = abweichungVon(v);
+                      const hinweis = abw ? ` · ${abweichungText(abw)} (Basisplan: ${zeitraum({ anfang: v.plan_anfang!, ende: v.plan_ende! } as Bauvorgang)})` : '';
                       return (
                         <div key={v.id} className="flex group">
                           <div className="sticky left-0 z-10 w-44 sm:w-72 shrink-0 bg-white dark:bg-gray-800 border-r border-gray-100 dark:border-gray-700 flex items-center gap-2 pl-4 pr-2 h-7">
                             <AboSchalter an={imAbo.has(v.id)} onClick={() => aboSetzen([v.id], !imAbo.has(v.id))}
                               titel={imAbo.has(v.id) ? 'Aus dem Kalender-Abo nehmen' : 'Ins Kalender-Abo'} />
-                            <button onClick={() => bearbeiten(v)} title={`${v.vorgang} · ${zeitraum(v)} · ${formatDauer(v.dauer_tage)}`}
-                              className={`truncate text-left hover:text-blue-600 dark:hover:text-blue-400 ${status === 'vorbei' ? 'text-gray-400' : 'text-gray-700 dark:text-gray-200'}`}>
+                            <button onClick={() => bearbeiten(v)} title={`${v.vorgang} · ${zeitraum(v)} · ${formatDauer(v.dauer_tage)}${hinweis}`}
+                              className={`truncate text-left hover:text-blue-600 dark:hover:text-blue-400 ${abw ? (abw.art === 'spaeter' ? 'text-red-600 dark:text-red-400' : 'text-violet-600 dark:text-violet-300') : status === 'vorbei' ? 'text-gray-400' : 'text-gray-700 dark:text-gray-200'}`}>
                               {v.vorgang}
                             </button>
                           </div>
                           <div className="relative h-7 text-gray-100 dark:text-gray-700/60 group-hover:bg-blue-50/60 dark:group-hover:bg-blue-950/30" style={{ width: zeitachse.breite, ...wochenRaster() }}>
-                            <button onClick={() => bearbeiten(v)} title={`${v.vorgang} · ${zeitraum(v)} · ${formatDauer(v.dauer_tage)}`}
-                              className={`absolute top-1.5 h-4 rounded ${BALKEN_FARBE[status]} hover:ring-2 hover:ring-blue-300`}
+                            {/* Grauer Strich = ursprünglich geplante Lage laut Basisplan */}
+                            {abw && (
+                              <div className="absolute top-[23px] h-[3px] rounded-full bg-gray-400 dark:bg-gray-500 pointer-events-none"
+                                style={{ left: tageZwischen(zeitachse.start, v.plan_anfang!) * TAG_PX, width: Math.max((tageZwischen(v.plan_anfang!, v.plan_ende!) + 1) * TAG_PX, 6) }} />
+                            )}
+                            <button onClick={() => bearbeiten(v)} title={`${v.vorgang} · ${zeitraum(v)} · ${formatDauer(v.dauer_tage)}${hinweis}`}
+                              className={`absolute top-1.5 h-4 rounded ${abw ? ABW_BALKEN[abw.art] : BALKEN_FARBE[status]} ${abw && status === 'vorbei' ? 'opacity-50' : ''} hover:ring-2 hover:ring-blue-300`}
                               style={{ left: tageZwischen(zeitachse.start, v.anfang) * TAG_PX, width: Math.max((tageZwischen(v.anfang, v.ende) + 1) * TAG_PX, 6) }} />
                             <HeuteLinie links={zeitachse.heuteLinks} />
                           </div>
@@ -491,6 +549,9 @@ export default function BauzeitenplanTab() {
             <span className="flex items-center gap-1.5"><span className="w-3 h-2.5 rounded-sm bg-blue-500" /> geplant</span>
             <span className="flex items-center gap-1.5"><span className="w-3 h-2.5 rounded-sm bg-green-500" /> läuft gerade</span>
             <span className="flex items-center gap-1.5"><span className="w-3 h-2.5 rounded-sm bg-gray-300 dark:bg-gray-600" /> vorbei</span>
+            <span className="flex items-center gap-1.5"><span className="w-3 h-2.5 rounded-sm bg-red-500" /> später als geplant</span>
+            <span className="flex items-center gap-1.5"><span className="w-3 h-2.5 rounded-sm bg-violet-500" /> früher als geplant</span>
+            <span className="flex items-center gap-1.5"><span className="w-3 h-[3px] rounded-full bg-gray-400" /> ursprüngliche Lage</span>
             <span className="flex items-center gap-1.5"><span className="w-px h-3 bg-red-400" /> heute</span>
             <span>Klick auf einen Vorgang zum Bearbeiten · 📅 = erscheint in deinem Kalender-Abo</span>
           </div>
@@ -506,6 +567,7 @@ export default function BauzeitenplanTab() {
                 <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm divide-y divide-gray-100 dark:divide-gray-700">
                   {nachMonat[monat].map(v => {
                     const status = statusVon(v, heute);
+                    const abw = abweichungVon(v);
                     return (
                       <div key={v.id} className={`flex items-center gap-3 px-4 py-3 ${status === 'vorbei' ? 'opacity-50' : ''}`}>
                         <AboSchalter an={imAbo.has(v.id)} onClick={() => aboSetzen([v.id], !imAbo.has(v.id))}
@@ -514,6 +576,12 @@ export default function BauzeitenplanTab() {
                           <div className="font-medium text-gray-900 dark:text-white truncate">{v.vorgang}</div>
                           <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{v.gewerk} · {zeitraum(v)}</div>
                         </button>
+                        {abw && (
+                          <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${ABW_TEXT[abw.art]}`}
+                            title={`Basisplan: ${zeitraum({ anfang: v.plan_anfang!, ende: v.plan_ende! } as Bauvorgang)}`}>
+                            {abw.art === 'spaeter' ? '+' : '−'}{abw.tage} {abw.tage === 1 ? 'Tag' : 'Tage'}
+                          </span>
+                        )}
                         {status === 'laeuft' && <span className="text-[11px] font-semibold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950/40 px-2 py-0.5 rounded-full">läuft</span>}
                         <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap tabular-nums">{formatDauer(v.dauer_tage)}</span>
                       </div>

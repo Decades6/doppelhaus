@@ -58,6 +58,9 @@ export interface Bauvorgang {
   ende: string;
   /** Dauer in Arbeitstagen, wie im Plan des Bauträgers (auch 0,5 möglich) */
   dauer_tage: number;
+  /** Basisplan (Stand des Bauträger-Plans) — Abweichungen davon werden farbig markiert */
+  plan_anfang: string | null;
+  plan_ende: string | null;
   created_at: string;
   updated_at: string;
 }
