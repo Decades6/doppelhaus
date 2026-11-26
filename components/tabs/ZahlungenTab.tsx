@@ -203,13 +203,18 @@ export default function ZahlungenTab() {
     setRechnungen(prev => Object.fromEntries(Object.entries(prev).filter(([key]) => key !== id)));
   }
 
-  async function rechnungenHochladen(zahlungId: string, dateien: FileList | null) {
-    if (!dateien || dateien.length === 0) return;
+  async function rechnungenHochladen(zahlungId: string, dateiListe: FileList | null) {
+    if (!dateiListe || dateiListe.length === 0) return;
+    // FileList ist "live": der Aufrufer setzt input.value = '' zurück, das leert die Liste.
+    // Deshalb sofort in ein Array kopieren, bevor das erste await läuft.
+    const dateien = Array.from(dateiListe);
     setRechnungFehler('');
     setUploadZahlungId(zahlungId);
+    try {
     const { data: { user } } = await supabase.auth.getUser();
     const neu: Rechnung[] = [];
-    for (const original of Array.from(dateien)) {
+    console.log('[Rechnung-Upload] Start', zahlungId, dateien.map(d => `${d.name} (${d.type || 'kein Typ'}, ${d.size} B)`));
+    for (const original of dateien) {
       // Kamera-Fotos haben teils keine Endung im Namen — dann zählt der Typ
       if (!DATEI_ENDUNGEN.test(original.name) && !original.type.startsWith('image/')) {
         setRechnungFehler(`„${original.name}“ wird nicht unterstützt — erlaubt sind PDF und Fotos (JPG, PNG, HEIC).`);
@@ -236,10 +241,28 @@ export default function ZahlungenTab() {
         setRechnungFehler(`Speichern fehlgeschlagen: ${error?.message ?? 'unbekannter Fehler'}`);
         continue;
       }
+      console.log('[Rechnung-Upload] gespeichert', data);
       neu.push(data as Rechnung);
     }
-    if (neu.length > 0) setRechnungen(prev => ({ ...prev, [zahlungId]: [...(prev[zahlungId] ?? []), ...neu] }));
-    setUploadZahlungId(null);
+    // Zur Sicherheit die Rechnungen frisch aus der Datenbank laden (Quelle der Wahrheit)
+    const { data: rg, error: rgErr } = await supabase.from('zahlung_rechnungen').select('*').order('created_at', { ascending: true });
+    if (rgErr) {
+      setRechnungFehler(`Rechnungen konnten nicht neu geladen werden: ${rgErr.message}`);
+      if (neu.length > 0) setRechnungen(prev => ({ ...prev, [zahlungId]: [...(prev[zahlungId] ?? []), ...neu] }));
+    } else if (rg) {
+      const nachZahlung: Record<string, Rechnung[]> = {};
+      for (const r of rg as Rechnung[]) (nachZahlung[r.zahlung_id] ??= []).push(r);
+      setRechnungen(nachZahlung);
+      if (neu.length > 0 && !nachZahlung[zahlungId]?.length) {
+        setRechnungFehler('Die Rechnung wurde hochgeladen, aber die Datenbank liefert sie nicht zurück (Leserechte für „zahlung_rechnungen“ prüfen).');
+      }
+    }
+    } catch (e) {
+      console.error('[Rechnung-Upload] Fehler', e);
+      setRechnungFehler(`Unerwarteter Fehler beim Upload: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setUploadZahlungId(null);
+    }
   }
 
   async function rechnungOeffnen(r: Rechnung) {
